@@ -118,6 +118,14 @@ def _derive_weights(entropy_seed: float) -> Dict[OmegaMode, float]:
     Dict[OmegaMode, float]
         Normalised weights summing to 1.0, minimum 0.05 per mode.
     """
+    # Guard against NaN / Inf seeds — fall back to neutral midpoint
+    if not math.isfinite(entropy_seed):
+        entropy_seed = 0.5
+    # Reduce extreme finite values: phase = seed * k * π / N_OMEGA; for large seeds
+    # this overflows to Inf inside sin(). Fold into [0, 2π) to keep sin() valid.
+    elif abs(entropy_seed) > 1e15:
+        entropy_seed = abs(entropy_seed) % (2.0 * math.pi)
+
     # Scatter across 6 modes using trigonometric phase shifts
     _MIN_WEIGHT  = 0.05                              # guaranteed floor per Ω-mode
     _DISTRIBUTE  = 1.0 - _N_OMEGA * _MIN_WEIGHT     # remaining mass to distribute = 0.70
@@ -377,6 +385,9 @@ def _final_binding(weighted_b: float, conflict: TopologyConflict,
     adjusted = weighted_b * penalty
     if chain_attested:
         adjusted = min(5.0, adjusted + 0.3)
+    # Guard against NaN/Inf propagated from extreme or invalid inputs
+    if not math.isfinite(adjusted):
+        adjusted = 1.0
     return max(1, min(5, round(adjusted)))
 
 

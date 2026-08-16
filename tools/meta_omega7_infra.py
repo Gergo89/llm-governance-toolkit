@@ -287,6 +287,11 @@ def _second_order_seed(seed1: float, cycle_index: int, volatility: float) -> flo
     """
     if not math.isfinite(seed1):
         seed1 = 0.5
+    # Reduce extreme finite values: seed1² or seed1·π·idx can overflow to Inf
+    # inside sin/cos for seeds near float max. Fold into [0, 2π) — same chaos
+    # behaviour, no overflow.
+    elif abs(seed1) > 1e15:
+        seed1 = abs(seed1) % (2.0 * math.pi)
     vol = max(0.0, min(1.0, float(volatility)))
     idx = max(1, int(cycle_index))
 
