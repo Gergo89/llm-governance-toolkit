@@ -1,0 +1,43 @@
+id: UC-0003
+name: Customer support conversational agent
+description: >
+  Public-facing chat agent that answers billing and account questions, drafts
+  responses and can issue goodwill credits up to a fixed limit without a human
+  approving each one. Generates summary text stored on the customer record.
+business_owner: VP Customer Operations
+technical_owner: TBD
+status: in_production
+deployment: customer_facing
+model_provider: Example Model Co
+model_name: example-large-2
+personal_data: true
+special_category_data: false
+affects_natural_persons: true
+eu_market: true
+last_assessed: "2025-09-15"
+
+scores:
+  decision_impact: 2
+  autonomy: 2
+  data_sensitivity: 2
+  population_scale: 3
+  reversibility: 2
+  regulatory_exposure: 2
+
+transparency_triggers:
+  - direct_interaction
+  - synthetic_content
+
+controls_implemented:
+  - GOV-01
+  - GOV-02
+  - GOV-03
+  - RSK-01
+  - DAT-01
+  - DAT-03
+  - MDL-01
+  - OPS-01
+  - SUP-01
+
+links:
+  model_card: docs/model-cards/UC-0003.md

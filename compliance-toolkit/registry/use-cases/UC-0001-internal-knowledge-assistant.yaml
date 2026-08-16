@@ -1,0 +1,59 @@
+id: UC-0001
+name: Internal knowledge assistant
+description: >
+  Retrieval-augmented assistant over the internal policy wiki, HR handbook and
+  engineering runbooks. Answers staff questions and cites source pages. It does
+  not act on any system and does not make decisions about people.
+business_owner: Head of Internal Communications
+technical_owner: Platform Engineering — Knowledge Services
+status: in_production
+deployment: internal
+model_provider: Example Model Co
+model_name: example-large-2
+personal_data: false
+special_category_data: false
+affects_natural_persons: false
+eu_market: true
+last_assessed: "2026-06-01"
+
+scores:
+  decision_impact: 1
+  autonomy: 1
+  data_sensitivity: 1
+  population_scale: 1
+  reversibility: 1
+  regulatory_exposure: 1
+
+transparency_triggers:
+  - direct_interaction
+
+controls_implemented:
+  - GOV-01
+  - GOV-02
+  - GOV-03
+  - GOV-04
+  - GOV-05
+  - RSK-01
+  - RSK-03
+  - RSK-04
+  - DAT-01
+  - DAT-02
+  - DAT-03
+  - MDL-01
+  - MDL-02
+  - MDL-04
+  - MDL-05
+  - OPS-01
+  - OPS-02
+  - OPS-04
+  - OPS-05
+  - TRA-01
+  - TRA-02
+  - SUP-01
+  - SUP-02
+  - SUP-03
+
+links:
+  model_card: docs/model-cards/UC-0001.md
+  eval_report: reports/UC-0001-eval-2026-06.json
+  runbook: runbooks/UC-0001-fallback.md

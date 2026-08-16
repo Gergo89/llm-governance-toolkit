@@ -1,0 +1,475 @@
+# Control catalogue for the LLM Governance Toolkit.
+#
+# Each control is a governance obligation an organisation can evidence.
+# `tiers` lists the risk tiers at which the control is MANDATORY.
+# Framework references are informative aids for auditors, not legal advice.
+#
+# Reference key:
+#   eu_ai_act  -> Article numbers of Regulation (EU) 2024/1689 as amended by
+#                 Regulation (EU) 2026/1744 (Digital Omnibus on AI)
+#   nist_ai_rmf-> Subcategories of NIST AI RMF 1.0 (Jan 2023)
+#   iso_42001  -> Annex A controls of ISO/IEC 42001:2023
+
+version: "1.1.0"
+
+controls:
+  # ---------------------------------------------------------------- GOVERN --
+  - id: GOV-01
+    title: Approved enterprise AI policy
+    family: Governance
+    tiers: [minimal, limited, high]
+    statement: >
+      A board- or executive-approved AI policy defines permitted and prohibited
+      uses of AI, applies to employees and contractors, and is reviewed at least
+      annually.
+    evidence:
+      - Signed policy document with version and approval date
+      - Annual review minutes
+    references:
+      eu_ai_act: ["Art. 17"]
+      nist_ai_rmf: ["GOVERN 1.1", "GOVERN 1.2"]
+      iso_42001: ["A.2.2", "A.2.3", "A.2.4"]
+
+  - id: GOV-02
+    title: Accountable owner and defined roles
+    family: Governance
+    tiers: [minimal, limited, high]
+    statement: >
+      Every AI use case has a named accountable business owner and a named
+      technical owner. Governance, risk and compliance responsibilities are
+      documented in a RACI.
+    evidence:
+      - Registry entry with owner fields populated
+      - RACI matrix
+    references:
+      eu_ai_act: ["Art. 16", "Art. 26"]
+      nist_ai_rmf: ["GOVERN 2.1", "GOVERN 3.1"]
+      iso_42001: ["A.3.2", "A.10.2"]
+
+  - id: GOV-03
+    title: Maintained AI use-case inventory
+    family: Governance
+    tiers: [minimal, limited, high]
+    statement: >
+      All AI and LLM use cases, including shadow and pilot deployments, are
+      recorded in a central registry that is reconciled at least quarterly.
+    evidence:
+      - Machine-readable registry under version control
+      - Quarterly reconciliation report
+    references:
+      eu_ai_act: ["Art. 49", "Art. 71"]
+      nist_ai_rmf: ["MAP 1.1", "GOVERN 1.6"]
+      iso_42001: ["A.4.2", "A.6.2.3"]
+
+  - id: GOV-04
+    title: Pre-deployment approval gate
+    family: Governance
+    tiers: [limited, high]
+    statement: >
+      No AI use case reaches production without documented sign-off from the AI
+      governance forum at the risk tier determined by the tiering rubric.
+    evidence:
+      - Approval record referencing the risk assessment ID
+      - Change-advisory or governance forum minutes
+    references:
+      eu_ai_act: ["Art. 17", "Art. 26"]
+      nist_ai_rmf: ["GOVERN 1.3", "MANAGE 1.1"]
+      iso_42001: ["A.6.1.2", "A.6.2.5"]
+
+  - id: GOV-05
+    title: AI literacy and role-based training
+    family: Governance
+    tiers: [minimal, limited, high]
+    statement: >
+      Staff who build, procure, operate or make decisions with AI systems
+      receive role-appropriate training. Completion is tracked.
+    evidence:
+      - Training curriculum and completion records
+    references:
+      eu_ai_act: ["Art. 4"]
+      nist_ai_rmf: ["GOVERN 2.2", "GOVERN 3.2"]
+      iso_42001: ["A.4.6"]
+    notes: >
+      Art. 4 was softened by the Digital Omnibus from an obligation to "ensure"
+      literacy to one to "support the development" of literacy. Treat training
+      as a control that remains expected in practice.
+
+  # ------------------------------------------------------------------ RISK --
+  - id: RSK-01
+    title: Documented risk tiering
+    family: Risk
+    tiers: [minimal, limited, high]
+    statement: >
+      Each use case is scored with the risk tiering rubric before build starts,
+      and the resulting tier is recorded in the registry.
+    evidence:
+      - Completed rubric with scores and rationale per dimension
+    references:
+      eu_ai_act: ["Art. 6", "Annex III"]
+      nist_ai_rmf: ["MAP 1.5", "MAP 5.1"]
+      iso_42001: ["A.5.2"]
+
+  - id: RSK-02
+    title: Impact assessment for rights and freedoms
+    family: Risk
+    tiers: [high]
+    statement: >
+      High-tier use cases complete a fundamental rights impact assessment and,
+      where personal data is processed, a data protection impact assessment,
+      before deployment.
+    evidence:
+      - Completed FRIA/DPIA signed by the DPO or equivalent
+    references:
+      eu_ai_act: ["Art. 27"]
+      nist_ai_rmf: ["MAP 1.1", "MAP 3.1", "MEASURE 2.11"]
+      iso_42001: ["A.5.3", "A.5.4", "A.5.5"]
+
+  - id: RSK-03
+    title: Residual risk acceptance
+    family: Risk
+    tiers: [limited, high]
+    statement: >
+      Residual risk that cannot be mitigated is explicitly accepted in writing
+      by the accountable owner at or above the authority level defined in the
+      risk appetite statement.
+    evidence:
+      - Signed residual risk acceptance record
+    references:
+      eu_ai_act: ["Art. 9"]
+      nist_ai_rmf: ["MANAGE 1.3", "MANAGE 2.1"]
+      iso_42001: ["A.5.2"]
+
+  - id: RSK-04
+    title: Periodic reassessment
+    family: Risk
+    tiers: [limited, high]
+    statement: >
+      Risk assessments are refreshed on the cadence set by tier (high: every 6
+      months; limited: every 12 months) and on any material change.
+    evidence:
+      - Reassessment history in the registry
+    references:
+      eu_ai_act: ["Art. 9", "Art. 72"]
+      nist_ai_rmf: ["MANAGE 4.1", "MEASURE 1.3"]
+      iso_42001: ["A.6.2.6"]
+
+  # ------------------------------------------------------------------ DATA --
+  - id: DAT-01
+    title: Data provenance and lawful basis
+    family: Data
+    tiers: [minimal, limited, high]
+    statement: >
+      The source, licence and lawful basis for every dataset used for training,
+      fine-tuning, retrieval or evaluation is documented.
+    evidence:
+      - Dataset inventory with licence and lawful basis columns
+    references:
+      eu_ai_act: ["Art. 10"]
+      nist_ai_rmf: ["MAP 2.3", "MEASURE 2.2"]
+      iso_42001: ["A.7.3", "A.7.5"]
+
+  - id: DAT-02
+    title: Sensitive data handling controls
+    family: Data
+    tiers: [limited, high]
+    statement: >
+      Special-category, confidential and regulated data is classified,
+      minimised, and either excluded from prompts and training or protected by
+      documented technical controls such as redaction, tokenisation or
+      customer-managed encryption.
+    evidence:
+      - Data classification mapping for the use case
+      - Redaction or DLP configuration
+    references:
+      eu_ai_act: ["Art. 10"]
+      nist_ai_rmf: ["MAP 4.1", "MEASURE 2.10"]
+      iso_42001: ["A.7.2", "A.7.4"]
+
+  - id: DAT-03
+    title: Retention and secondary-use limits
+    family: Data
+    tiers: [minimal, limited, high]
+    statement: >
+      Prompt, completion and log retention periods are defined. Vendor contracts
+      prohibit training on organisational data unless explicitly approved.
+    evidence:
+      - Retention schedule
+      - Contract clause reference or vendor configuration screenshot
+    references:
+      eu_ai_act: ["Art. 10", "Art. 12"]
+      nist_ai_rmf: ["GOVERN 6.1", "MAP 4.1"]
+      iso_42001: ["A.7.2", "A.10.3"]
+
+  - id: DAT-04
+    title: Representativeness and bias review of data
+    family: Data
+    tiers: [high]
+    statement: >
+      Training, fine-tuning and evaluation datasets are examined for gaps and
+      skews relevant to the affected population, and findings are documented.
+    evidence:
+      - Dataset bias review report
+    references:
+      eu_ai_act: ["Art. 10"]
+      nist_ai_rmf: ["MEASURE 2.11", "MAP 3.4"]
+      iso_42001: ["A.7.4", "A.7.6"]
+
+  # ----------------------------------------------------------------- MODEL --
+  - id: MDL-01
+    title: Model and system card
+    family: Model
+    tiers: [limited, high]
+    statement: >
+      A model card records intended use, out-of-scope use, model and version,
+      known limitations, evaluation results and the date of last review.
+    evidence:
+      - Completed model card stored with the registry entry
+    references:
+      eu_ai_act: ["Art. 11", "Art. 13", "Annex IV"]
+      nist_ai_rmf: ["MAP 2.1", "MAP 3.5"]
+      iso_42001: ["A.6.2.7", "A.8.2"]
+
+  - id: MDL-02
+    title: Pre-deployment evaluation against acceptance thresholds
+    family: Model
+    tiers: [limited, high]
+    statement: >
+      Quantitative evaluation is run before launch against thresholds defined in
+      advance. Launch is blocked if any blocking threshold fails.
+    evidence:
+      - Evaluation report with pass/fail per threshold
+      - CI job output
+    references:
+      eu_ai_act: ["Art. 15"]
+      nist_ai_rmf: ["MEASURE 1.1", "MEASURE 2.3"]
+      iso_42001: ["A.6.2.4"]
+
+  - id: MDL-03
+    title: Adversarial testing and red-teaming
+    family: Model
+    tiers: [high]
+    statement: >
+      High-tier use cases undergo structured adversarial testing covering prompt
+      injection, jailbreaks, data exfiltration, harmful output and, where
+      applicable, tool misuse. Findings are tracked to closure.
+    evidence:
+      - Red-team report with severity ratings and remediation status
+    references:
+      eu_ai_act: ["Art. 15", "Art. 55"]
+      nist_ai_rmf: ["MEASURE 2.7", "MANAGE 2.2"]
+      iso_42001: ["A.6.2.4"]
+
+  - id: MDL-04
+    title: Runtime guardrails
+    family: Model
+    tiers: [limited, high]
+    statement: >
+      Input and output filtering, refusal behaviour, rate limits and
+      tool-permission scoping are configured and tested for the deployed system.
+    evidence:
+      - Guardrail configuration under version control
+      - Guardrail test results
+    references:
+      eu_ai_act: ["Art. 15"]
+      nist_ai_rmf: ["MANAGE 2.3", "MEASURE 2.6"]
+      iso_42001: ["A.6.2.4", "A.6.2.5"]
+
+  - id: MDL-05
+    title: Change management for models and prompts
+    family: Model
+    tiers: [limited, high]
+    statement: >
+      Model version, system prompt and retrieval corpus changes are versioned,
+      reviewed and re-evaluated before promotion to production.
+    evidence:
+      - Change log linking each production change to an evaluation run
+    references:
+      eu_ai_act: ["Art. 17", "Art. 72"]
+      nist_ai_rmf: ["MANAGE 4.1", "GOVERN 1.5"]
+      iso_42001: ["A.6.2.5", "A.6.2.6"]
+
+  # ------------------------------------------------------------- OPERATIONS --
+  - id: OPS-01
+    title: Tamper-evident audit logging
+    family: Operations
+    tiers: [limited, high]
+    statement: >
+      Interactions are logged with a record of the user, timestamp, model
+      version, prompt reference, output reference and any tool calls, in a store
+      that makes undetected modification infeasible.
+    evidence:
+      - Log schema and sample records
+      - Integrity verification job output
+    references:
+      eu_ai_act: ["Art. 12", "Art. 19"]
+      nist_ai_rmf: ["MEASURE 1.1", "MANAGE 4.1"]
+      iso_42001: ["A.6.2.8"]
+
+  - id: OPS-02
+    title: Production monitoring and drift detection
+    family: Operations
+    tiers: [limited, high]
+    statement: >
+      Quality, refusal rate, latency, cost and complaint signals are monitored
+      with alert thresholds and a named responder.
+    evidence:
+      - Dashboard and alert configuration
+      - On-call rota
+    references:
+      eu_ai_act: ["Art. 72"]
+      nist_ai_rmf: ["MEASURE 2.4", "MANAGE 4.1"]
+      iso_42001: ["A.6.2.6"]
+
+  - id: OPS-03
+    title: Effective human oversight
+    family: Operations
+    tiers: [high]
+    statement: >
+      A named human reviewer can understand the output, override or reverse it,
+      and has the authority, time and training to do so. Oversight is not a
+      rubber stamp: override rates are monitored.
+    evidence:
+      - Human oversight plan
+      - Override and escalation statistics
+    references:
+      eu_ai_act: ["Art. 14", "Art. 26"]
+      nist_ai_rmf: ["GOVERN 3.2", "MANAGE 2.2"]
+      iso_42001: ["A.9.2", "A.9.4"]
+
+  - id: OPS-04
+    title: Fallback and shutdown path
+    family: Operations
+    tiers: [limited, high]
+    statement: >
+      A documented, tested procedure exists to disable the AI system and revert
+      to a non-AI process without unacceptable disruption.
+    evidence:
+      - Runbook with the most recent test date
+    references:
+      eu_ai_act: ["Art. 14", "Art. 15"]
+      nist_ai_rmf: ["MANAGE 2.4", "MANAGE 4.3"]
+      iso_42001: ["A.6.2.6"]
+
+  - id: OPS-05
+    title: AI incident response and reporting
+    family: Operations
+    tiers: [minimal, limited, high]
+    statement: >
+      AI incidents are classified by severity, triaged under a documented plan,
+      and, where a serious incident threshold is met, reported to the relevant
+      authority within the statutory window.
+    evidence:
+      - AI incident response plan
+      - Incident register and post-incident reviews
+    references:
+      eu_ai_act: ["Art. 73"]
+      nist_ai_rmf: ["MANAGE 4.3", "GOVERN 4.3"]
+      iso_42001: ["A.8.4"]
+
+  # ---------------------------------------------------------- TRANSPARENCY --
+  - id: TRA-01
+    title: Disclosure of AI interaction
+    family: Transparency
+    tiers: [limited, high]
+    statement: >
+      People interacting with the system are informed they are interacting with
+      an AI system, unless that is obvious from the context.
+    evidence:
+      - Screenshot or copy of the user-facing disclosure
+    references:
+      eu_ai_act: ["Art. 50(1)"]
+      nist_ai_rmf: ["GOVERN 5.1", "MAP 5.2"]
+      iso_42001: ["A.8.2", "A.8.5"]
+
+  - id: TRA-02
+    title: Machine-readable marking of synthetic content
+    family: Transparency
+    tiers: [limited, high]
+    statement: >
+      Synthetic audio, image, video and text output is marked in a
+      machine-readable format and detectable as artificially generated or
+      manipulated. Deepfake output carries a visible disclosure.
+    evidence:
+      - Watermark, provenance metadata or content-credentials configuration
+    references:
+      eu_ai_act: ["Art. 50(2)", "Art. 50(4)"]
+      nist_ai_rmf: ["MEASURE 2.8", "MANAGE 4.1"]
+      iso_42001: ["A.8.2"]
+    notes: >
+      Applies from 2 August 2026. Generative systems placed on the EU market
+      before that date have until 2 December 2026 for the machine-readable
+      marking obligation.
+
+  - id: TRA-03
+    title: Explanation to affected persons
+    family: Transparency
+    tiers: [high]
+    statement: >
+      A person subject to a decision informed by the AI system can obtain a
+      plain-language explanation of the decision and of the system's role in it.
+    evidence:
+      - Explanation template and the channel through which it is provided
+    references:
+      eu_ai_act: ["Art. 86"]
+      nist_ai_rmf: ["MEASURE 2.9", "MAP 5.2"]
+      iso_42001: ["A.8.5", "A.9.2"]
+
+  - id: TRA-04
+    title: Registration and external disclosure
+    family: Transparency
+    tiers: [high]
+    statement: >
+      Where registration in a public database is required, the entry is created
+      before deployment and kept current.
+    evidence:
+      - Registration reference number and last-updated date
+    references:
+      eu_ai_act: ["Art. 49", "Art. 71"]
+      nist_ai_rmf: ["GOVERN 4.2"]
+      iso_42001: ["A.8.3"]
+
+  # ---------------------------------------------------------- SUPPLY CHAIN --
+  - id: SUP-01
+    title: Vendor and model-provider due diligence
+    family: Supply chain
+    tiers: [minimal, limited, high]
+    statement: >
+      Third-party model and application providers are assessed for security,
+      data handling, evaluation practice, incident history and sub-processor
+      chain before contract signature.
+    evidence:
+      - Completed vendor assessment
+      - Provider documentation or certification evidence
+    references:
+      eu_ai_act: ["Art. 25", "Art. 53"]
+      nist_ai_rmf: ["GOVERN 6.1", "GOVERN 6.2"]
+      iso_42001: ["A.10.3"]
+
+  - id: SUP-02
+    title: Contractual AI terms
+    family: Supply chain
+    tiers: [limited, high]
+    statement: >
+      Contracts address training-data use, confidentiality, IP indemnity,
+      security, audit rights, incident notification, deprecation notice periods
+      and exit assistance.
+    evidence:
+      - Executed contract or amendment with clause map
+    references:
+      eu_ai_act: ["Art. 25"]
+      nist_ai_rmf: ["GOVERN 6.1"]
+      iso_42001: ["A.10.2", "A.10.3"]
+
+  - id: SUP-03
+    title: Model deprecation and change notification
+    family: Supply chain
+    tiers: [limited, high]
+    statement: >
+      The organisation is notified of upstream model version changes and
+      deprecations with enough lead time to re-evaluate before the change lands.
+    evidence:
+      - Contractual notice period and subscription to provider change feed
+    references:
+      eu_ai_act: ["Art. 25", "Art. 72"]
+      nist_ai_rmf: ["MANAGE 4.1", "GOVERN 6.2"]
+      iso_42001: ["A.10.3", "A.6.2.6"]

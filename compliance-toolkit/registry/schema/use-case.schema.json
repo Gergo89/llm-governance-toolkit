@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Gergo89/llm-governance-toolkit/registry/schema/use-case.schema.json",
+  "title": "AI use-case registry entry",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "description",
+    "business_owner",
+    "technical_owner",
+    "status",
+    "deployment",
+    "scores"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^UC-[0-9]{4}$",
+      "description": "Stable identifier, e.g. UC-0001."
+    },
+    "name": { "type": "string", "minLength": 3, "maxLength": 120 },
+    "description": { "type": "string", "minLength": 20 },
+    "business_owner": { "type": "string", "minLength": 3 },
+    "technical_owner": { "type": "string", "minLength": 3 },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "in_review", "approved", "in_production", "retired", "rejected"]
+    },
+    "deployment": {
+      "type": "string",
+      "enum": ["internal", "customer_facing", "public", "embedded_product"]
+    },
+    "model_provider": { "type": "string" },
+    "model_name": { "type": "string" },
+    "personal_data": { "type": "boolean", "default": false },
+    "special_category_data": { "type": "boolean", "default": false },
+    "affects_natural_persons": { "type": "boolean", "default": false },
+    "eu_market": { "type": "boolean", "default": true },
+    "last_assessed": { "type": "string", "format": "date" },
+    "scores": {
+      "type": "object",
+      "required": [
+        "decision_impact",
+        "autonomy",
+        "data_sensitivity",
+        "population_scale",
+        "reversibility",
+        "regulatory_exposure"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "decision_impact": { "$ref": "#/$defs/score" },
+        "autonomy": { "$ref": "#/$defs/score" },
+        "data_sensitivity": { "$ref": "#/$defs/score" },
+        "population_scale": { "$ref": "#/$defs/score" },
+        "reversibility": { "$ref": "#/$defs/score" },
+        "regulatory_exposure": { "$ref": "#/$defs/score" }
+      }
+    },
+    "annex_iii_categories": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "biometrics",
+          "critical_infrastructure",
+          "education",
+          "employment",
+          "essential_services",
+          "law_enforcement",
+          "migration_border",
+          "justice_democracy"
+        ]
+      }
+    },
+    "prohibited_practices": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "subliminal_manipulation",
+          "exploiting_vulnerability",
+          "social_scoring",
+          "predictive_policing_profiling",
+          "facial_scraping",
+          "emotion_recognition_work_education",
+          "biometric_categorisation_sensitive",
+          "realtime_remote_biometric_id",
+          "csam_ncii_generation"
+        ]
+      }
+    },
+    "transparency_triggers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "direct_interaction",
+          "synthetic_content",
+          "emotion_or_biometric_categorisation",
+          "deepfake"
+        ]
+      }
+    },
+    "controls_implemented": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z]{3}-[0-9]{2}$" }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Named links to evidence: model_card, fria, dpia, eval_report, runbook."
+    }
+  },
+  "$defs": {
+    "score": { "type": "integer", "minimum": 0, "maximum": 3 }
+  }
+}

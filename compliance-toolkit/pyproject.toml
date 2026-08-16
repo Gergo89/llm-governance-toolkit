@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-governance-toolkit"
+version = "1.0.0"
+description = "Policy, risk and assurance machinery for governing LLM use cases in the enterprise."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Gergo" }]
+keywords = ["ai-governance", "llm", "eu-ai-act", "nist-ai-rmf", "iso-42001", "compliance"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Legal Industry",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+dependencies = [
+  "PyYAML>=6.0",
+  "jsonschema>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[project.scripts]
+llmgov = "llm_governance.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Gergo89/llm-governance-toolkit"
+Issues = "https://github.com/Gergo89/llm-governance-toolkit/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+llm_governance = ["resources/*.yaml", "evals/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

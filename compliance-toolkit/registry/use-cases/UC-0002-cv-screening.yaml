@@ -1,0 +1,47 @@
+id: UC-0002
+name: CV screening and candidate ranking
+description: >
+  Scores and ranks inbound job applications against a structured role profile,
+  producing a shortlist that recruiters review. Ranking influences which
+  candidates progress to a first interview.
+business_owner: Director of Talent Acquisition
+technical_owner: People Systems Engineering
+status: in_review
+deployment: internal
+model_provider: Example Model Co
+model_name: example-large-2
+personal_data: true
+special_category_data: false
+affects_natural_persons: true
+eu_market: true
+last_assessed: "2026-07-20"
+
+scores:
+  decision_impact: 3
+  autonomy: 2
+  data_sensitivity: 2
+  population_scale: 2
+  reversibility: 2
+  regulatory_exposure: 3
+
+annex_iii_categories:
+  - employment
+
+controls_implemented:
+  - GOV-01
+  - GOV-02
+  - GOV-03
+  - GOV-05
+  - RSK-01
+  - RSK-02
+  - DAT-01
+  - DAT-02
+  - DAT-03
+  - MDL-01
+  - MDL-02
+  - SUP-01
+
+links:
+  fria: assessments/UC-0002-fria-2026-07.pdf
+  dpia: assessments/UC-0002-dpia-2026-07.pdf
+  model_card: docs/model-cards/UC-0002.md

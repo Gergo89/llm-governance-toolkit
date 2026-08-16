@@ -83,6 +83,37 @@ Same structure throughout; only one axis moves — the reachability of the truth
 
 This toolkit is **not safety-critical software** and must not sit on the critical path of any life- or mission-critical control function. It carries none of the assurance evidence such roles require: it is not developed or verified to **DO-178C** (up to Design Assurance Level A) or **DO-254** for airborne systems, to **IEC 61508** Safety Integrity Levels (with their quantified dangerous-failure targets — SIL 4 ≈ 10⁻⁴–10⁻⁵ probability of failure on demand), to **IEC 61513 / IEC 60880 / IEEE 7-4.3.2** for nuclear **Class 1E** instrumentation and control, or to **MIL-STD-882** system-safety practice; it provides no formal proof, no hardware fault tolerance, no redundancy or diversity, no real-time determinism, and no independent V&V, and its containment gate presumes reversible, bounded actions — so it deliberately (and correctly) refuses the irreversible actuation those domains turn on, such as a reactor-scram thermal transient, a released store, or a launched vehicle. Its legitimate role in nuclear, aerospace, and defense contexts is confined to the **non-safety-critical AI and analytical layer** — governing ML/LLM components, decision *support*, evidence-maturity ordering, metric-gaming audits, and non-self-approval of analyses — always advisory, off the critical path, with certified systems and human authorities retaining control. Where its ethos aligns with meaningful-human-control principles (e.g. **DoD Directive 3000.09**), that is alignment in intent, not certification of fitness: it must **not** be treated as a control element in flight-critical, reactor-protection, or nuclear command-and-control / weapons-release functions.
 
+## Compliance layer — [`compliance-toolkit/`](compliance-toolkit/)
+
+The tools above operate on a *running* system: they catch a proxy decoupling
+from truth, an unverified claim dressed as a verified one, an agent action that
+isn't reversible or authorised. [`compliance-toolkit/`](compliance-toolkit/)
+sits one level up, on the *organisational* process that decides which systems
+get built and deployed at all.
+
+| | |
+|---|---|
+| 30 controls | mapped to EU AI Act, NIST AI RMF 1.0, ISO/IEC 42001:2023 |
+| Risk tiering | deterministic rubric plus a regulatory floor from Art. 5 / Annex III / Art. 50 |
+| Use-case registry | JSON-schema-validated YAML; adding an AI system means opening a PR |
+| Policy-as-code | nine rules, non-zero exit — a governance breach fails CI like a failing test |
+| Assurance | 16-probe offline eval harness; hash-chained audit log storing hashes and redacted previews, not raw prompts |
+| Templates | acceptable use, lifecycle, data handling, incident response, vendor, human oversight; intake form, model card, FRIA/DPIA |
+
+```bash
+cd compliance-toolkit && pip install -e ".[dev]"
+llmgov score      # tier every registered use case
+llmgov validate   # schema + policy-as-code checks; exits 1 on findings
+```
+
+The same honesty constraint applies here as everywhere else in this repository:
+the framework crosswalks say *"this control contributes evidence toward that
+requirement"* and never *"that requirement is satisfied."* Mapping a control to
+an article is not a conformity assessment, and none of it is legal advice.
+Regulatory statements are sourced in
+[`compliance-toolkit/compliance/SOURCES.md`](compliance-toolkit/compliance/SOURCES.md)
+and current as at 16 August 2026.
+
 ## Quick start
 
 ```bash
@@ -91,4 +122,6 @@ python tools/knowledge_maturity.py     # self-test + demo
 python patterns/containment_guard.py   # self-test + demo
 ```
 
-No dependencies beyond the Python standard library.
+No dependencies beyond the Python standard library. The compliance layer in
+[`compliance-toolkit/`](compliance-toolkit/) additionally needs PyYAML and
+jsonschema.

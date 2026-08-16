@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Toolkit outputs
+reports/*.md
+reports/*.json
+!reports/.gitkeep
+audit/*.jsonl
+*.local.yaml
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

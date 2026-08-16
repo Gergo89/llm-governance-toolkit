@@ -1,0 +1,39 @@
+# Worked example of a proposal that the toolkit stops at intake.
+#
+# Inferring emotional state of employees in the workplace is a prohibited
+# practice under Article 5 of the EU AI Act, outside narrow medical and safety
+# purposes. The entry is kept in the registry with status `rejected` so the
+# decision is auditable rather than invisible.
+
+id: UC-0004
+name: Contact-centre agent sentiment monitoring
+description: >
+  Proposal to infer the emotional state of contact-centre employees from call
+  audio and surface a per-agent wellbeing and performance score to team leads.
+  Rejected at intake; see the decision record linked below.
+business_owner: Head of Contact Centre Operations
+technical_owner: Workforce Analytics
+status: rejected
+deployment: internal
+personal_data: true
+special_category_data: true
+affects_natural_persons: true
+eu_market: true
+last_assessed: "2026-05-04"
+
+scores:
+  decision_impact: 3
+  autonomy: 1
+  data_sensitivity: 3
+  population_scale: 2
+  reversibility: 2
+  regulatory_exposure: 3
+
+prohibited_practices:
+  - emotion_recognition_work_education
+
+annex_iii_categories:
+  - employment
+
+links:
+  decision_record: decisions/UC-0004-rejection-2026-05.md
