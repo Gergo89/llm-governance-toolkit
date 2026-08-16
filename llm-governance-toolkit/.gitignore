@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Duplicate text exports (session artifacts, not part of the repo)
+*.py.txt
+
+# Build / distribution
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Generated validation evidence (uploaded by CI)
+artifacts/*
+!artifacts/README.md
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets / private
+*.qenc
+*.env
+.env.*
+
+# Notebook checkpoints
+.ipynb_checkpoints/

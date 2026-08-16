@@ -1,0 +1,58 @@
+name: Stress Tests
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stress-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MPLBACKEND: Agg
+      PYTHONUTF8: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project
+        run: python -m pip install --disable-pip-version-check .
+
+      - name: Run main stress test
+        id: main_stress
+        run: python stress_test.py
+
+      - name: Run cage stress test
+        id: cage_stress
+        run: python cage_stress_test.py
+
+      - name: Collect reproducibility evidence
+        if: always()
+        env:
+          MAIN_STRESS_OUTCOME: ${{ steps.main_stress.outcome }}
+          CAGE_STRESS_OUTCOME: ${{ steps.cage_stress.outcome }}
+        run: python scripts/collect_artifacts.py artifacts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stress-evidence-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30

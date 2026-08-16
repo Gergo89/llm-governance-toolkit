@@ -1,0 +1,462 @@
+{
+  "phase1_selftests": {
+    "total": 47,
+    "passed": 47,
+    "asserted": 46,
+    "modules": [
+      {
+        "module": "cage_stress_test.py",
+        "pass": true,
+        "asserted": false,
+        "secs": 1.566
+      },
+      {
+        "module": "patterns/containment_guard.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.034
+      },
+      {
+        "module": "patterns/governed_switch.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.036
+      },
+      {
+        "module": "soi/soi_pipeline.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.047
+      },
+      {
+        "module": "tools/bounded_process.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.034
+      },
+      {
+        "module": "tools/capable_agent_cage.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.036
+      },
+      {
+        "module": "tools/decoupling_monitor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.835
+      },
+      {
+        "module": "tools/dependency_graph.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.025
+      },
+      {
+        "module": "tools/determinism_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.06
+      },
+      {
+        "module": "tools/dimensional_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.05
+      },
+      {
+        "module": "tools/duality_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.034
+      },
+      {
+        "module": "tools/em_estimation.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.684
+      },
+      {
+        "module": "tools/em_field.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.035
+      },
+      {
+        "module": "tools/emergence_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.037
+      },
+      {
+        "module": "tools/energy_matter.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.035
+      },
+      {
+        "module": "tools/eval_gaming_detector.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.595
+      },
+      {
+        "module": "tools/fixed_point_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.042
+      },
+      {
+        "module": "tools/flow_conservation.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.038
+      },
+      {
+        "module": "tools/fractal_prerequisite.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.036
+      },
+      {
+        "module": "tools/fractal_recursion.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.034
+      },
+      {
+        "module": "tools/free_will_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.035
+      },
+      {
+        "module": "tools/freedom_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.034
+      },
+      {
+        "module": "tools/gene_shift_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.875
+      },
+      {
+        "module": "tools/goodhart_auditor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.041
+      },
+      {
+        "module": "tools/governed_decision.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.462
+      },
+      {
+        "module": "tools/green_raven.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.044
+      },
+      {
+        "module": "tools/ground_truth_auditor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.57
+      },
+      {
+        "module": "tools/knowledge_maturity.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.039
+      },
+      {
+        "module": "tools/math_to_reality.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.036
+      },
+      {
+        "module": "tools/optimal_timing.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 1.269
+      },
+      {
+        "module": "tools/option_space.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.048
+      },
+      {
+        "module": "tools/postmortem_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.045
+      },
+      {
+        "module": "tools/qualia_report_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.043
+      },
+      {
+        "module": "tools/raven_taxonomy.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.044
+      },
+      {
+        "module": "tools/sciences_layers.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.037
+      },
+      {
+        "module": "tools/severity_taxonomy_casestudy.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.037
+      },
+      {
+        "module": "tools/sos_determinism_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.061
+      },
+      {
+        "module": "tools/taxonomy_builder.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.04
+      },
+      {
+        "module": "tools/telemetry_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 1.116
+      },
+      {
+        "module": "tools/temporal_decision_seam.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.46
+      },
+      {
+        "module": "tools/temporal_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.044
+      },
+      {
+        "module": "tools/temporal_telemetry.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.679
+      },
+      {
+        "module": "tools/time_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.487
+      },
+      {
+        "module": "tools/tokenization_taxonomy.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.037
+      },
+      {
+        "module": "tools/water_infra.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.035
+      },
+      {
+        "module": "tools/white_raven_governor.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.043
+      },
+      {
+        "module": "tools/words_vs_numbers.py",
+        "pass": true,
+        "asserted": true,
+        "secs": 0.036
+      }
+    ]
+  },
+  "phase2_determinism": {
+    "total": 47,
+    "deterministic": 46,
+    "nondeterministic": [
+      "cage_stress_test.py"
+    ]
+  },
+  "phase3_properties": {
+    "em_loglik_monotonic": {
+      "held": 160,
+      "trials": 160,
+      "rate": 1.0
+    },
+    "em_separated_recovered": {
+      "held": 80,
+      "trials": 80,
+      "rate": 1.0
+    },
+    "em_overlapping_withheld": {
+      "held": 80,
+      "trials": 80,
+      "rate": 1.0
+    },
+    "fractal_dim_closed_form_max_err": 0.0,
+    "fractal_boxcount_max_err": 0.0,
+    "energy_conserved_correct": {
+      "held": 3000,
+      "trials": 3000,
+      "rate": 1.0
+    },
+    "energy_overunity_refused": {
+      "held": 3000,
+      "trials": 3000,
+      "rate": 1.0
+    },
+    "flow_detection_accuracy": {
+      "held": 3000,
+      "trials": 3000,
+      "rate": 1.0
+    },
+    "duality_circular_caught": {
+      "held": 2000,
+      "trials": 2000,
+      "rate": 1.0
+    },
+    "duality_independent_passed": {
+      "held": 2000,
+      "trials": 2000,
+      "rate": 1.0
+    },
+    "raven_white_refutes": {
+      "held": 2000,
+      "trials": 2000,
+      "rate": 1.0
+    },
+    "raven_greens_excluded": {
+      "held": 2000,
+      "trials": 2000,
+      "rate": 1.0
+    },
+    "bounded_process_classification": {
+      "held": 2000,
+      "trials": 2000,
+      "rate": 1.0
+    },
+    "temporal_future_never_certified": {
+      "held": 500,
+      "trials": 500,
+      "rate": 1.0
+    },
+    "gene_shift_alert_in_drift": {
+      "held": 500,
+      "trials": 500,
+      "rate": 1.0
+    },
+    "gene_shift_gap_discontinuous": {
+      "held": 500,
+      "trials": 500,
+      "rate": 1.0
+    },
+    "gene_shift_lead_positive": {
+      "held": 494,
+      "trials": 500,
+      "rate": 0.988
+    }
+  },
+  "phase4_edge": {
+    "total": 7,
+    "handled": 7,
+    "cases": [
+      {
+        "case": "flow: empty pipeline",
+        "ok": true,
+        "detail": "CONSERVED"
+      },
+      {
+        "case": "duality: length-1 series",
+        "ok": true,
+        "detail": "GROUNDED_DUALITY"
+      },
+      {
+        "case": "duality: no check side",
+        "ok": true,
+        "detail": "COLLAPSED_MONISM"
+      },
+      {
+        "case": "energy: all zero",
+        "ok": true,
+        "detail": "CONSERVED"
+      },
+      {
+        "case": "energy: huge values",
+        "ok": true,
+        "detail": "CONSERVED"
+      },
+      {
+        "case": "em: tiny n=6",
+        "ok": true,
+        "detail": "LATENT_RECOVERED"
+      },
+      {
+        "case": "freedom: no options",
+        "ok": true,
+        "detail": "DETERMINED"
+      }
+    ]
+  },
+  "phase5_perf": {
+    "duality.govern": {
+      "n": 20000,
+      "secs": 0.1036,
+      "ops_per_sec": 193057.1,
+      "us_per_op": 5.18
+    },
+    "energy.govern": {
+      "n": 20000,
+      "secs": 0.0399,
+      "ops_per_sec": 500722.6,
+      "us_per_op": 2.0
+    },
+    "temporal.govern": {
+      "n": 20000,
+      "secs": 0.0564,
+      "ops_per_sec": 354535.2,
+      "us_per_op": 2.82
+    },
+    "fractal.sim_dimension": {
+      "n": 100000,
+      "secs": 0.0227,
+      "ops_per_sec": 4412341.0,
+      "us_per_op": 0.23
+    },
+    "flow.govern(6 stages)": {
+      "n": 20000,
+      "secs": 0.0909,
+      "ops_per_sec": 219950.7,
+      "us_per_op": 4.55
+    },
+    "em.fit_em(n=400)": {
+      "n": 50,
+      "secs": 0.0305,
+      "ops_per_sec": 1639.4,
+      "us_per_op": 609.97
+    },
+    "gene_shift.monitor(n=60)": {
+      "n": 2000,
+      "secs": 6.6324,
+      "ops_per_sec": 301.5,
+      "us_per_op": 3316.2
+    }
+  }
+}

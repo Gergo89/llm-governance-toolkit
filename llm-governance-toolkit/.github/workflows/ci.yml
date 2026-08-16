@@ -1,0 +1,70 @@
+name: Fast Checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project and development tools
+        run: python -m pip install --disable-pip-version-check ".[dev]"
+
+      - name: Lint for correctness errors
+        run: ruff check .
+
+      - name: Run fast invariant tests
+        run: pytest -m "not stress"
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Build source and wheel distributions
+        run: |
+          python -m pip install --disable-pip-version-check "build>=1.2,<2"
+          python -m build
+
+      - name: Smoke-test the wheel
+        run: |
+          python -m venv /tmp/wheel-test
+          /tmp/wheel-test/bin/python -m pip install --disable-pip-version-check dist/*.whl
+          /tmp/wheel-test/bin/python -c "from llm_governance_toolkit.tools import energy_matter; assert energy_matter.govern(energy_matter.combustion()).verdict == 'CONSERVED'"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
