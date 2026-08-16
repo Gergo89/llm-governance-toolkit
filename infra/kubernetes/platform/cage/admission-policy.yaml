@@ -1,0 +1,39 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cage-pod-boundary
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: "!object.spec.hostNetwork && !object.spec.hostPID && !object.spec.hostIPC"
+      message: "Cage workloads cannot share host namespaces."
+    - expression: "object.spec.containers.all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || c.securityContext.privileged == false)"
+      message: "Cage workloads cannot run privileged containers."
+    - expression: "object.spec.containers.all(c, !has(c.securityContext) || !has(c.securityContext.allowPrivilegeEscalation) || c.securityContext.allowPrivilegeEscalation == false)"
+      message: "Cage workloads must disable privilege escalation."
+    - expression: "object.spec.containers.all(c, has(c.resources) && has(c.resources.requests) && has(c.resources.limits))"
+      message: "Every Cage container must declare resource requests and limits."
+    - expression: "!has(object.spec.initContainers) || object.spec.initContainers.all(c, has(c.resources) && has(c.resources.requests) && has(c.resources.limits))"
+      message: "Every Cage init container must declare resource requests and limits."
+    - expression: "!has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.hostPath))"
+      message: "Cage workloads cannot mount host paths."
+    - expression: "object.spec.containers.all(c, !has(c.ports) || c.ports.all(p, !has(p.hostPort) || p.hostPort == 0))"
+      message: "Cage workloads cannot claim host ports."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cage-pod-boundary
+spec:
+  policyName: cage-pod-boundary
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        agi.internal/security-tier: cage

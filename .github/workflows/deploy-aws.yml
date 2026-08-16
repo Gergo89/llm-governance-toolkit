@@ -1,0 +1,60 @@
+name: Deploy AWS infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+      apply:
+        description: Apply the reviewed plan
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: terraform-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Initialize Terraform
+        run: >-
+          terraform -chdir=infra/terraform/aws init
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          -backend-config="key=app/${{ inputs.environment }}/terraform.tfstate"
+          -backend-config="region=eu-central-1"
+          -backend-config="encrypt=true"
+          -backend-config="use_lockfile=true"
+
+      - name: Plan
+        run: >-
+          terraform -chdir=infra/terraform/aws plan
+          -var-file=environments/${{ inputs.environment }}.tfvars
+          -out=tfplan
+
+      - name: Apply
+        if: inputs.apply
+        run: terraform -chdir=infra/terraform/aws apply -auto-approve tfplan
+

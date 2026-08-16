@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform-system
+
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - rbac.yaml
+  - collector-config.yaml
+  - service-contract.yaml
+  - deployment.yaml
+  - service.yaml
+  - availability.yaml
+  - network-policy.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: cathedral

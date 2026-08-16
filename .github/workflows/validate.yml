@@ -1,0 +1,48 @@
+name: Validate infrastructure
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.4
+
+      - name: Terraform format
+        run: terraform -chdir=infra/terraform/aws fmt -check -recursive
+
+      - name: Terraform validate
+        run: |
+          terraform -chdir=infra/terraform/aws init -backend=false
+          terraform -chdir=infra/terraform/aws validate
+
+      - name: Bootstrap Terraform validate
+        run: |
+          terraform -chdir=infra/terraform/bootstrap init -backend=false
+          terraform -chdir=infra/terraform/bootstrap validate
+
+      - name: Render Kubernetes manifests
+        run: |
+          kubectl kustomize infra/kubernetes/overlays/dev > /tmp/dev.yaml
+          kubectl kustomize infra/kubernetes/overlays/prod > /tmp/prod.yaml
+
+      - name: Validate Docker Compose
+        env:
+          POSTGRES_PASSWORD: ci-only
+          GRAFANA_ADMIN_PASSWORD: ci-only
+        run: docker compose config --quiet
+

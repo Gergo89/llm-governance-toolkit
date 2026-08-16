@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  APP_ENV: production
+  PORT: "8080"
+  LOG_FORMAT: json
+  OTEL_SERVICE_NAME: app
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://cathedral-telemetry.platform-system.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=production

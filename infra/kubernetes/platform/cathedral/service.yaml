@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cathedral-telemetry
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8889"
+spec:
+  selector:
+    app.kubernetes.io/name: cathedral-telemetry
+  ports:
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+    - {name: metrics, port: 8889, targetPort: metrics}
+

@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ../../platform/cage
+  - ../../platform/cathedral
+
+images:
+  - name: ghcr.io/example/app
+    newName: ghcr.io/example/app
+    newTag: replace-with-immutable-release
+
+patches:
+  - path: patch.yaml

@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cathedral-service-contract
+data:
+  service.yaml: |
+    apiVersion: platform.agi.internal/v1
+    kind: ServiceContract
+    metadata:
+      name: app
+      owner: platform-team
+      tier: critical
+    spec:
+      runtimeBoundary: cage
+      protocol: http
+      port: 8080
+      health:
+        readiness: /healthz
+        liveness: /healthz
+      telemetry:
+        protocol: otlp-http
+        endpoint: cathedral-telemetry.platform-system.svc.cluster.local:4318
+      dependencies:
+        - postgresql
+        - redis
+        - object-storage
+  slo.yaml: |
+    apiVersion: platform.agi.internal/v1
+    kind: ServiceLevelObjectives
+    metadata:
+      service: app
+    spec:
+      window: 30d
+      availability:
+        objective: 99.9
+        indicator: successful_requests / valid_requests
+      latency:
+        objective: 99.0
+        threshold: 500ms
+      burnRateAlerts:
+        - severity: page
+          shortWindow: 5m
+          longWindow: 1h
+          factor: 14.4
+        - severity: ticket
+          shortWindow: 30m
+          longWindow: 6h
+          factor: 6
+
