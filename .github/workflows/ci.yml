@@ -1,0 +1,23 @@
+name: Stress Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install numpy matplotlib
+
+      - name: Run main stress test
+        run: python stress_test.py
+
+      - name: Run cage stress test
+        run: python cage_stress_test.py

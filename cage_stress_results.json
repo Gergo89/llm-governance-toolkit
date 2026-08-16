@@ -1,0 +1,32 @@
+{
+  "A": {
+    "n": 6144,
+    "escapes": 0,
+    "false_blocks": 0,
+    "mismatches": 0,
+    "admitted": 2,
+    "blocked": 6142
+  },
+  "B": {
+    "trials": 100000,
+    "escapes": 0,
+    "mismatches": 0
+  },
+  "C": {
+    "subsets": 63,
+    "violations": 0
+  },
+  "D": {
+    "dangerous_blocked": 7,
+    "dangerous_total": 7,
+    "benign_admitted": 2,
+    "benign_total": 2
+  },
+  "E": {
+    "deterministic": true
+  },
+  "F": {
+    "ops_per_sec": 444350.5,
+    "us_per_op": 2.25
+  }
+}
