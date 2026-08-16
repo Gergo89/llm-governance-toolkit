@@ -1,6 +1,6 @@
 # LLM Governance Toolkit
 
-[![Stress Tests](https://github.com/YOUR_USERNAME/llm-governance-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/llm-governance-toolkit/actions/workflows/ci.yml)
+[![Stress Tests](https://github.com/Gergo89/llm-governance-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/Gergo89/llm-governance-toolkit/actions/workflows/ci.yml)
 
 *Practical, honestly-scoped tools and patterns for making LLM and agent workflows trustworthy — by making their limits explicit and keeping a human holding the pen.*
 
