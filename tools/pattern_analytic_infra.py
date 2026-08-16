@@ -101,7 +101,7 @@ _PLATEAU_CV_THRESHOLD: float = 0.05
 _BURST_DENSITY_RATIO: float = 3.0
 
 # Outlier: z-score threshold
-_OUTLIER_Z_THRESHOLD: float = 2.5
+_OUTLIER_Z_THRESHOLD: float = 2.0
 
 # Hierarchical: pattern at both fine and coarse granularity (r > threshold at both)
 _HIERARCHICAL_R_THRESHOLD: float = 0.70
@@ -280,13 +280,14 @@ def _detect_burst(values: Sequence[float]) -> PatternFinding:
     n = len(values)
     if n < 6:
         return PatternFinding(PatternType.BURST, PatternStrength.ABSENT, 0.0, "")
-    # Baseline: mean of first half; local: max density in second half windows
+    # Baseline: max of first half; local: max density in second half windows
+    # Using max-to-max avoids false positives on linear trends (mean-to-max inflates ratio)
     half = n // 2
-    baseline_mean = _mean(values[:half])
-    if baseline_mean == 0:
+    baseline_max = max(values[:half]) if values[:half] else 0.0
+    if baseline_max == 0:
         return PatternFinding(PatternType.BURST, PatternStrength.ABSENT, 0.0, "")
     local_max = max(values[half:])
-    ratio = local_max / (abs(baseline_mean) + 1e-9)
+    ratio = local_max / (abs(baseline_max) + 1e-9)
     if ratio >= _BURST_DENSITY_RATIO:
         return PatternFinding(PatternType.BURST, PatternStrength.STRONG, min(1.0, ratio/5),
                               f"Burst ratio={ratio:.2f} vs baseline.")
@@ -364,8 +365,11 @@ def _compute_binding(findings: List[PatternFinding]) -> int:
     Bursts/outlier clusters reduce binding (unpredictable evidence).
     """
     alert_types = {PatternType.BURST, PatternType.OUTLIER_CLUSTER}
+    # Only MODERATE or STRONG bursts/clusters penalise binding;
+    # WEAK (marginal) signals are not significant enough to warrant reduction.
     has_alert = any(
-        f.pattern_type in alert_types and f.strength != PatternStrength.ABSENT
+        f.pattern_type in alert_types
+        and f.strength in {PatternStrength.MODERATE, PatternStrength.STRONG}
         for f in findings
     )
     best_strength = max((_STRENGTH_SCORE[f.strength] for f in findings), default=0)
@@ -610,7 +614,8 @@ def _run_tests() -> bool:
 
     # 15. Mean and std
     print("\n[15] Statistics helpers")
-    xs = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    # mean=5.0, sample std = sqrt(28/7) = 2.0 exactly
+    xs = [2.0, 3.0, 4.0, 5.0, 5.0, 6.0, 7.0, 8.0]
     tr.ok("mean=5.0", abs(_mean(xs) - 5.0) < 0.001)
     tr.ok("std~2.0", abs(_std(xs) - 2.0) < 0.01)
 

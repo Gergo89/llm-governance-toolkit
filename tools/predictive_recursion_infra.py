@@ -134,7 +134,8 @@ class PREstimator:
         updated = [(1 - a) * self.weights[i] + a * numerator[i] / Z
                    for i in range(_GRID_SIZE)]
         self.weights = updated
-        self.history.append((likelihood[self.n_obs - 1], self.posterior_mode()))
+        mode_idx = max(range(_GRID_SIZE), key=lambda i: self.weights[i])
+        self.history.append((likelihood[mode_idx], self.posterior_mode()))
 
     def posterior_mode(self) -> int:
         """Binding level with the highest posterior weight."""

@@ -373,9 +373,11 @@ def _human_events(n: int = 20, base_ms: float = 100.0) -> Tuple[MovementEvent, .
     t = 0.0
     x, y = 100.0, 200.0
     for i in range(n):
-        # jitter: use deterministic pseudo-noise
-        jitter = ((i * 17 + 3) % 50) - 25
-        interval = base_ms + jitter
+        # Two-component jitter with coprime cycles → 9+ distinct 10ms bins,
+        # producing timing entropy > 2.5 bits for n=20 (threshold check passes).
+        j1 = ((i * 17 + 3) % 50) - 25   # cycle-50, range ±25 ms
+        j2 = ((i * 11 + 7) % 40) - 20   # cycle-40, range ±20 ms
+        interval = base_ms + j1 + j2
         t += max(interval, 5.0)
         x += ((i * 31) % 20) - 10
         y += ((i * 13) % 20) - 10

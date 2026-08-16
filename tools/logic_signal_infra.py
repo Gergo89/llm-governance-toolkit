@@ -211,7 +211,7 @@ def _detect_logic_signals(arg: Argument) -> List[LogicSignal]:
         signals.append(LogicSignal.UNSUPPORTED_LEAP)
 
     # Formal fallacies (severity 2)
-    if arg.affirming_consequent:
+    if arg.consequent_affirmed:
         signals.append(LogicSignal.AFFIRMING_CONSEQUENT)
 
     if arg.antecedent_denied:

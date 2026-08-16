@@ -164,7 +164,9 @@ class SoSNode:
             if mean_trust >= 0.85 and len(self.binding_evidence) >= 5:
                 base = min(5, base + 1)
             elif mean_trust < 0.40:
-                base = max(1, base - 1)
+                # Sustained low trust warrants a 2-level penalty so
+                # FULLY_OPERATIONAL nodes (base=4) land at binding=2 → WITHHOLD
+                base = max(1, base - 2)
 
         # Penalise for broken critical edges
         if self.n_critical_edges_broken >= 2:

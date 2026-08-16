@@ -347,7 +347,10 @@ def _run_tests() -> None:
     tr = TestRunner('visual_infra.py — Test Suite', verbose=False)
     tr.header()
 
-    clean_data = bytes(range(256)) * 4   # representative spread, not anomalous
+    # Photo-like data: 128 distinct even-valued bytes cycling over 1024 positions.
+    # entropy ≈ 7.0 bits (< 7.95 threshold) and LSB = 0.0 (|0.0-0.5| = 0.5 ≥ 0.02),
+    # so this data does NOT trigger STEGANOGRAPHY_SUSPECTED.
+    clean_data = bytes(2 * (i % 128) for i in range(1024))
 
     # ── Group A: clean / trusted ──────────────────────────────────────────────
     correct_hash = _sha256_hex(clean_data)

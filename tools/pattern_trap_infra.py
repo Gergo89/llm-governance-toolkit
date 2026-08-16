@@ -210,14 +210,21 @@ def _detect_traps(signal: TrapSignal) -> List[TrapType]:
             if TrapType.AUTHORITY_ANCHOR not in detected:
                 detected.append(TrapType.AUTHORITY_ANCHOR)
 
-    # 5. Recency trap
+    # 5. Recency trap — fraction of items in the upper half of the temporal value range.
+    # Bug fix: the old code used sorted_ranks[3n/4] as the boundary, which by definition
+    # captures only ~25% of items, so recency_frac could never reach 0.75.
+    # Correct approach: split the temporal RANGE at its midpoint and check if ≥75% of
+    # evidence items land above that midpoint (i.e., in the recent zone).
     if n >= 4:
-        quartile_boundary = sorted(it.temporal_rank for it in items)[3 * n // 4]
-        recent_count = sum(1 for it in items if it.temporal_rank >= quartile_boundary)
-        recency_frac = recent_count / n
-        if recency_frac >= _RECENCY_DOMINANCE_THRESHOLD:
-            if TrapType.RECENCY_TRAP not in detected:
-                detected.append(TrapType.RECENCY_TRAP)
+        sorted_ranks = sorted(it.temporal_rank for it in items)
+        min_rank, max_rank = sorted_ranks[0], sorted_ranks[-1]
+        if min_rank < max_rank:   # skip if all ranks equal (no temporal spread)
+            half_boundary = (min_rank + max_rank) / 2
+            recent_count = sum(1 for it in items if it.temporal_rank >= half_boundary)
+            recency_frac = recent_count / n
+            if recency_frac >= _RECENCY_DOMINANCE_THRESHOLD:
+                if TrapType.RECENCY_TRAP not in detected:
+                    detected.append(TrapType.RECENCY_TRAP)
 
     # 6. Salience bias
     if n >= 3:
