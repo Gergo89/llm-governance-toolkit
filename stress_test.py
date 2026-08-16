@@ -20,6 +20,12 @@ from math import log
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SUBDIRS = ["tools", "patterns", "soi", "agent_cage", "ontology_mapping"]
+
+# Packaged subprojects: importable packages with their own test runners, not
+# standalone self-testing modules. Phase 1 executes each file directly, which a
+# src-layout package with relative imports cannot survive. These are excluded
+# here and covered by their own CI workflow instead.
+EXCLUDE_DIRS = ["compliance-toolkit"]
 for d in SUBDIRS:
     sys.path.insert(0, os.path.join(ROOT, d))
 import numpy as np
@@ -38,8 +44,13 @@ def phase1_selftests():
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(os.path.join(ROOT, d) for d in SUBDIRS)
     env["MPLBACKEND"] = "Agg"
+    def _excluded(path):
+        rel = os.path.relpath(path, ROOT)
+        head = rel.replace(os.sep, "/").split("/")[0]
+        return head in EXCLUDE_DIRS
+
     mods = sorted(p for p in glob.glob(os.path.join(ROOT, "**", "*.py"), recursive=True)
-                  if os.path.basename(p) != "stress_test.py")
+                  if os.path.basename(p) != "stress_test.py" and not _excluded(p))
     rows, npass, ntimed = [], 0, 0
     for p in mods:
         rel = os.path.relpath(p, ROOT)
