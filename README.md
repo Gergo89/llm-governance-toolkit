@@ -22,6 +22,36 @@ This is a small, coherent set of applied AI-safety engineering pieces. Each is d
 
 Every tool runs its own self-test: `python <file>.py`.
 
+### Install and validate
+
+Python 3.11 or newer is supported. Install the importable package and development tools with:
+
+```bash
+python -m pip install -e ".[dev]"
+pytest -m "not stress"       # fast deterministic invariant suite
+ruff check .                 # correctness-oriented static checks
+```
+
+Modules are available under the `llm_governance_toolkit` namespace while the original standalone
+scripts remain runnable. For example:
+
+```python
+from llm_governance_toolkit.tools import energy_matter
+
+assert energy_matter.govern(energy_matter.combustion()).verdict == "CONSERVED"
+```
+
+The exhaustive validation is intentionally separate from the fast PR suite:
+
+```bash
+python stress_test.py
+python cage_stress_test.py
+```
+
+GitHub Actions runs fast checks across Python 3.11–3.14 on every push and pull request. Exhaustive
+stress tests run after changes reach `main`, nightly, or by manual dispatch; fresh result JSON and
+figures are uploaded with a reproducibility manifest rather than committed as routine source churn.
+
 Two of these close the loop with the wider work in this project. `decoupling_monitor` is the operational complement to `goodhart_auditor`: the auditor catches a metric that *overclaims by name* at definition time; the monitor catches one that was honest but is *being gamed in operation* (the same proxy-vs-reality divergence as the money model's peg drifting from its backing, and "same price, worse product" hidden inflation). `optimal_timing` is the decision layer for early-warning systems: given a forecast (e.g. a collapse probability) and a cost asymmetry, it computes the act threshold — and it composes with the rest of the toolkit, since an "act now" recommendation still routes through non-self-approval and containment before anything executes.
 
 ### The consolidation layer

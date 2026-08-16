@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible governance, determinism, packaging, or test failure
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping make the toolkit's claims more reproducible.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Include the verdict, exception, or nondeterministic output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected invariant
+      description: State the invariant or documented behavior that should hold.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Provide a small input or command, including any seed.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Toolkit version or commit
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and platform
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: I understand this toolkit is not safety-critical control software.
+          required: true

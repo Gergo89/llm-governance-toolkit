@@ -13,6 +13,15 @@ __pycache__/
 dist/
 build/
 *.egg
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Generated validation evidence (uploaded by CI)
+artifacts/*
+!artifacts/README.md
 
 # OS noise
 .DS_Store

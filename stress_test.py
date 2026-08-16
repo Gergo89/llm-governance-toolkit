@@ -38,8 +38,15 @@ def phase1_selftests():
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(os.path.join(ROOT, d) for d in SUBDIRS)
     env["MPLBACKEND"] = "Agg"
-    mods = sorted(p for p in glob.glob(os.path.join(ROOT, "**", "*.py"), recursive=True)
-                  if os.path.basename(p) != "stress_test.py")
+    module_roots = [os.path.join(ROOT, d) for d in ("tools", "patterns", "soi")]
+    mods = [os.path.join(ROOT, "cage_stress_test.py")]
+    mods.extend(
+        p
+        for module_root in module_roots
+        for p in glob.glob(os.path.join(module_root, "*.py"))
+        if os.path.basename(p) != "__init__.py"
+    )
+    mods.sort()
     rows, npass, ntimed = [], 0, 0
     for p in mods:
         rel = os.path.relpath(p, ROOT)
@@ -76,8 +83,9 @@ def phase2_determinism(passed_rel):
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(os.path.join(ROOT, d) for d in SUBDIRS)
     env["MPLBACKEND"] = "Agg"
-    # exclude modules whose demo intentionally prints timing/paths; test the pure-logic ones
-    skip = {"stress_test.py"}
+    # Exclude harnesses whose output intentionally includes measured throughput;
+    # determinism is already checked against the cage's pure decision function.
+    skip = {"stress_test.py", "cage_stress_test.py"}
     det_ok, det_tot, rows = 0, 0, []
     for rel in passed_rel:
         if os.path.basename(rel) in skip:
@@ -349,6 +357,36 @@ def phase5_perf():
     RESULTS["phase5_perf"] = rows
 
 
+def _validation_failures(results):
+    failures = []
+    selftests = results["phase1_selftests"]
+    if selftests["passed"] != selftests["total"]:
+        failures.append(
+            f"self-tests: {selftests['passed']}/{selftests['total']} modules passed"
+        )
+    determinism = results["phase2_determinism"]
+    if determinism["deterministic"] != determinism["total"]:
+        failures.append(
+            "determinism: "
+            f"{determinism['deterministic']}/{determinism['total']} modules passed"
+        )
+    properties = results["phase3_properties"]
+    for name, outcome in properties.items():
+        if isinstance(outcome, dict):
+            minimum_rate = 0.98 if name == "gene_shift_lead_positive" else 1.0
+            if outcome["rate"] < minimum_rate:
+                failures.append(
+                    f"property {name}: {outcome['held']}/{outcome['trials']} "
+                    f"held (minimum {minimum_rate:.0%})"
+                )
+        elif outcome > 1e-9:
+            failures.append(f"property {name}: error {outcome:.3g} exceeds 1e-9")
+    edge = results["phase4_edge"]
+    if edge["handled"] != edge["total"]:
+        failures.append(f"edge cases: {edge['handled']}/{edge['total']} handled")
+    return failures
+
+
 if __name__ == "__main__":
     _hdr("GOVERNANCE TOOLKIT — EMPIRICAL STRESS TEST")
     passed = phase1_selftests()
@@ -359,3 +397,9 @@ if __name__ == "__main__":
     with open(os.path.join(ROOT, "stress_results.json"), "w") as f:
         json.dump(RESULTS, f, indent=2)
     _hdr("DONE — machine-readable results in stress_results.json")
+    failures = _validation_failures(RESULTS)
+    if failures:
+        print("\nVALIDATION FAILED")
+        for failure in failures:
+            print(f"  - {failure}")
+        raise SystemExit(1)
