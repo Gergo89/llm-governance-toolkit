@@ -38,6 +38,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -343,123 +344,116 @@ def _claim(cid: str, ts_ms: int = _NOW_MS, **kw) -> TemporalClaim:
 
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('time_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # ── Group A: trusted / clean ──────────────────────────────────────────────
     d = evaluate_temporal(_claim("A01", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS))
-    check("UT-A01: chain+NTP → TRUSTED, bind=5",    d.verdict, TemporalVerdict.TRUSTED)
-    check("UT-A01b: binding == 5",                   d.binding_level, 5)
-    check("UT-A01c: AFFIRM",                         d.governance_action, "AFFIRM")
-    check("UT-A01d: TIMESTAMP_CONSISTENT in threats",
+    tr.expect("UT-A01: chain+NTP → TRUSTED, bind=5",    d.verdict, TemporalVerdict.TRUSTED)
+    tr.expect("UT-A01b: binding == 5",                   d.binding_level, 5)
+    tr.expect("UT-A01c: AFFIRM",                         d.governance_action, "AFFIRM")
+    tr.expect("UT-A01d: TIMESTAMP_CONSISTENT in threats",
           TemporalThreat.TIMESTAMP_CONSISTENT in d.threats, True)
 
     d = evaluate_temporal(_claim("A02", ntp_timestamp_ms=_NTP_MS))
-    check("UT-A02: NTP only → TRUSTED, bind=4",     d.verdict, TemporalVerdict.TRUSTED)
-    check("UT-A02b: binding == 4",                   d.binding_level, 4)
+    tr.expect("UT-A02: NTP only → TRUSTED, bind=4",     d.verdict, TemporalVerdict.TRUSTED)
+    tr.expect("UT-A02b: binding == 4",                   d.binding_level, 4)
 
     d = evaluate_temporal(_claim("A03"))
-    check("UT-A03: system clock only → PROVISIONAL, bind=3", d.verdict, TemporalVerdict.PROVISIONAL)
-    check("UT-A03b: binding == 3",                           d.binding_level, 3)
+    tr.expect("UT-A03: system clock only → PROVISIONAL, bind=3", d.verdict, TemporalVerdict.PROVISIONAL)
+    tr.expect("UT-A03b: binding == 3",                           d.binding_level, 3)
 
     # ── Group B: temporal paradox ─────────────────────────────────────────────
     d = evaluate_temporal(_claim("B01", ts_ms=500_000_000))   # pre-digital epoch
-    check("UT-B01: pre-digital stamp → TEMPORAL_PARADOX",
+    tr.expect("UT-B01: pre-digital stamp → TEMPORAL_PARADOX",
           TemporalThreat.TEMPORAL_PARADOX in d.threats, True)
-    check("UT-B01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
-    check("UT-B01c: VOID",     d.governance_action, "VOID")
-    check("UT-B01d: binding == 1", d.binding_level, 1)
+    tr.expect("UT-B01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
+    tr.expect("UT-B01c: VOID",     d.governance_action, "VOID")
+    tr.expect("UT-B01d: binding == 1", d.binding_level, 1)
 
     # Content epoch mismatch
     d = evaluate_temporal(_claim("B02",
                                   ts_ms=_NOW_MS,
                                   content_epoch_lower_ms=_NOW_MS + 10_000_000))
-    check("UT-B02: ts before content lower → TEMPORAL_PARADOX",
+    tr.expect("UT-B02: ts before content lower → TEMPORAL_PARADOX",
           TemporalThreat.TEMPORAL_PARADOX in d.threats, True)
 
     d = evaluate_temporal(_claim("B03",
                                   ts_ms=_NOW_MS,
                                   content_epoch_upper_ms=_NOW_MS - 10_000_000))
-    check("UT-B03: ts after content upper → TEMPORAL_PARADOX",
+    tr.expect("UT-B03: ts after content upper → TEMPORAL_PARADOX",
           TemporalThreat.TEMPORAL_PARADOX in d.threats, True)
 
     # ── Group C: fabricated timestamp ─────────────────────────────────────────
     d = evaluate_temporal(_claim("C01",
                                   sibling_timestamps_ms=(_NOW_MS, _NOW_MS, _NOW_MS, _NOW_MS)))
-    check("UT-C01: all siblings identical → FABRICATED_TIMESTAMP",
+    tr.expect("UT-C01: all siblings identical → FABRICATED_TIMESTAMP",
           TemporalThreat.FABRICATED_TIMESTAMP in d.threats, True)
-    check("UT-C01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
+    tr.expect("UT-C01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
 
     d = evaluate_temporal(_claim("C02",
                                   sibling_timestamps_ms=(_NOW_MS, _NOW_MS + 1000, _NOW_MS + 2000, _NOW_MS + 3000)))
-    check("UT-C02: varied siblings → no FABRICATED_TIMESTAMP",
+    tr.expect("UT-C02: varied siblings → no FABRICATED_TIMESTAMP",
           TemporalThreat.FABRICATED_TIMESTAMP in d.threats, False)
 
     d = evaluate_temporal(_claim("C03",
                                   sibling_timestamps_ms=(_NOW_MS, _NOW_MS)))  # only 2 siblings → skip check
-    check("UT-C03: < 3 siblings → no fabrication check",
+    tr.expect("UT-C03: < 3 siblings → no fabrication check",
           TemporalThreat.FABRICATED_TIMESTAMP in d.threats, False)
 
     # ── Group D: clock skew ───────────────────────────────────────────────────
     bad_ntp = _NOW_MS + 5_000  # 5 seconds skew — too much
     d = evaluate_temporal(_claim("D01", ntp_timestamp_ms=bad_ntp))
-    check("UT-D01: 5s NTP skew → CLOCK_SKEW_DETECTED",
+    tr.expect("UT-D01: 5s NTP skew → CLOCK_SKEW_DETECTED",
           TemporalThreat.CLOCK_SKEW_DETECTED in d.threats, True)
-    check("UT-D01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
-    check("UT-D01c: skew_s ≈ 5.0", abs(d.skew_s - 5.0) < 0.01, True)
+    tr.expect("UT-D01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
+    tr.expect("UT-D01c: skew_s ≈ 5.0", abs(d.skew_s - 5.0) < 0.01, True)
 
     good_ntp = _NOW_MS + 100   # 100ms — within tolerance
     d = evaluate_temporal(_claim("D02", ntp_timestamp_ms=good_ntp))
-    check("UT-D02: 100ms NTP skew → no CLOCK_SKEW",
+    tr.expect("UT-D02: 100ms NTP skew → no CLOCK_SKEW",
           TemporalThreat.CLOCK_SKEW_DETECTED in d.threats, False)
 
     # ── Group E: stale / future claims ───────────────────────────────────────
     stale_ts = _NOW_MS - int(_FRESHNESS_WINDOW_S * 2 * 1000)   # 2 days old
     d = evaluate_temporal(_claim("E01", ts_ms=stale_ts))
-    check("UT-E01: 2-day-old claim → STALE_CLAIM",
+    tr.expect("UT-E01: 2-day-old claim → STALE_CLAIM",
           TemporalThreat.STALE_CLAIM in d.threats, True)
-    check("UT-E01b: SUSPECT", d.verdict, TemporalVerdict.SUSPECT)
+    tr.expect("UT-E01b: SUSPECT", d.verdict, TemporalVerdict.SUSPECT)
 
     future_ts = _NOW_MS + 60_000   # 60 seconds in the future
     d = evaluate_temporal(_claim("E02", ts_ms=future_ts))
-    check("UT-E02: 60s future → FUTURE_CLAIM",
+    tr.expect("UT-E02: 60s future → FUTURE_CLAIM",
           TemporalThreat.FUTURE_CLAIM in d.threats, True)
-    check("UT-E02b: SUSPECT", d.verdict, TemporalVerdict.SUSPECT)
+    tr.expect("UT-E02b: SUSPECT", d.verdict, TemporalVerdict.SUSPECT)
 
     near_future = _NOW_MS + 2_000  # 2 seconds — within tolerance
     d = evaluate_temporal(_claim("E03", ts_ms=near_future))
-    check("UT-E03: 2s future → no FUTURE_CLAIM",
+    tr.expect("UT-E03: 2s future → no FUTURE_CLAIM",
           TemporalThreat.FUTURE_CLAIM in d.threats, False)
 
     # ── Group F: audit surface ────────────────────────────────────────────────
     clean = [_claim(f"F{i}", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS)
              for i in range(5)]
     audit = audit_temporal_surface(clean)
-    check("UT-F01: all clean → SURFACE_CLEAN",  audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-F02: trusted == 5",                audit.trusted, 5)
+    tr.expect("UT-F01: all clean → SURFACE_CLEAN",  audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-F02: trusted == 5",                audit.trusted, 5)
 
     one_rejected = [
         _claim("F10", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS),
         _claim("F11", ts_ms=500_000_000),
     ]
     audit = audit_temporal_surface(one_rejected)
-    check("UT-F03: 1 rejected → CONTAMINATED",
+    tr.expect("UT-F03: 1 rejected → CONTAMINATED",
           audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_CONTAMINATED)
 
     three_rejected = [_claim(f"F2{i}", ts_ms=500_000_000) for i in range(3)]
     audit = audit_temporal_surface(three_rejected)
-    check("UT-F04: 3 rejected → COMPROMISED",
+    tr.expect("UT-F04: 3 rejected → COMPROMISED",
           audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
 
     empty = audit_temporal_surface([])
-    check("UT-F05: empty → SURFACE_CLEAN", empty.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-F05: empty → SURFACE_CLEAN", empty.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
 
@@ -467,15 +461,15 @@ def _run_tests() -> None:
     st1 = [_claim(f"s1_{i}", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS)
            for i in range(1000)]
     a1 = audit_temporal_surface(st1)
-    check("ST-01: 1000 verified → SURFACE_CLEAN", a1.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
-    check("ST-01b: trusted == 1000",               a1.trusted, 1000)
+    tr.expect("ST-01: 1000 verified → SURFACE_CLEAN", a1.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("ST-01b: trusted == 1000",               a1.trusted, 1000)
 
     # ST-02: 500 pre-digital paradox → all REJECTED, COMPROMISED
     st2 = [_claim(f"s2_{i}", ts_ms=500_000_000) for i in range(500)]
     a2 = audit_temporal_surface(st2)
-    check("ST-02: 500 paradox → SURFACE_COMPROMISED",
+    tr.expect("ST-02: 500 paradox → SURFACE_COMPROMISED",
           a2.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-02b: rejected == 500", a2.rejected, 500)
+    tr.expect("ST-02b: rejected == 500", a2.rejected, 500)
 
     # ST-03: mixed 800 clean + 200 paradox
     st3 = (
@@ -483,29 +477,29 @@ def _run_tests() -> None:
         + [_claim(f"s3b{i}", ts_ms=500_000_000) for i in range(200)]
     )
     a3 = audit_temporal_surface(st3)
-    check("ST-03: 200 rejected → COMPROMISED",
+    tr.expect("ST-03: 200 rejected → COMPROMISED",
           a3.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-03b: trusted == 800",  a3.trusted, 800)
-    check("ST-03c: rejected == 200", a3.rejected, 200)
+    tr.expect("ST-03b: trusted == 800",  a3.trusted, 800)
+    tr.expect("ST-03c: rejected == 200", a3.rejected, 200)
 
     # ST-04: stale flood → all SUSPECT
     st4 = [_claim(f"s4_{i}", ts_ms=stale_ts) for i in range(300)]
     a4 = audit_temporal_surface(st4)
-    check("ST-04: 300 stale → all SUSPECT", a4.suspect, 300)
-    check("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, TemporalSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("ST-04: 300 stale → all SUSPECT", a4.suspect, 300)
+    tr.expect("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, TemporalSurfaceVerdict.SURFACE_DEGRADED)
 
     # ST-05: fabricated timestamps → all REJECTED
     siblings = (_NOW_MS,) * 5
     st5 = [_claim(f"s5_{i}", sibling_timestamps_ms=siblings) for i in range(100)]
     a5 = audit_temporal_surface(st5)
-    check("ST-05: 100 fabricated → all REJECTED", a5.rejected, 100)
-    check("ST-05b: SURFACE_COMPROMISED",
+    tr.expect("ST-05: 100 fabricated → all REJECTED", a5.rejected, 100)
+    tr.expect("ST-05b: SURFACE_COMPROMISED",
           a5.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
 
     # ST-06: 2 rejected (< 3) → CONTAMINATED
     st6 = [_claim(f"s6_{i}", ts_ms=500_000_000) for i in range(2)]
     a6 = audit_temporal_surface(st6)
-    check("ST-06: 2 rejected → CONTAMINATED",
+    tr.expect("ST-06: 2 rejected → CONTAMINATED",
           a6.surface_verdict, TemporalSurfaceVerdict.SURFACE_CONTAMINATED)
 
     # ST-07: threat_distribution accuracy
@@ -514,19 +508,17 @@ def _run_tests() -> None:
         + [_claim(f"s7b{i}", ts_ms=stale_ts) for i in range(100)]
     )
     a7 = audit_temporal_surface(st7)
-    check("ST-07: TIMESTAMP_CONSISTENT dist == 300",
+    tr.expect("ST-07: TIMESTAMP_CONSISTENT dist == 300",
           a7.threat_distribution[TemporalThreat.TIMESTAMP_CONSISTENT.value], 300)
-    check("ST-07b: STALE_CLAIM dist == 100",
+    tr.expect("ST-07b: STALE_CLAIM dist == 100",
           a7.threat_distribution[TemporalThreat.STALE_CLAIM.value], 100)
 
     # ST-08: chain-NTP disagreement → not binding=5
     bad_chain = _NOW_MS + 10_000   # 10s from NTP
     d8 = evaluate_temporal(_claim("s8", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=bad_chain))
-    check("ST-08: chain/NTP disagree → binding < 5", d8.binding_level < 5, True)
+    tr.expect("ST-08: chain/NTP disagree → binding < 5", d8.binding_level < 5, True)
 
-    print(f"\ntime_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 

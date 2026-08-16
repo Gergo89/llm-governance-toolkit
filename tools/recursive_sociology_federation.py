@@ -35,6 +35,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ─── sociology scale ──────────────────────────────────────────────────────────
@@ -399,29 +400,18 @@ def build_society_federation(federation_id: str) -> RecursiveSociologyFederation
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("recursive_sociology_federation.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('recursive_sociology_federation.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Binding from scale and normative state
     print("\n[1] Binding from scale and normative state")
     n = SocioNode("n1", SociologyScale.SOCIETY)
-    ok("society integrated base=4", n.binding_level == 4)
+    tr.ok("society integrated base=4", n.binding_level == 4)
     n.normative_state = NormativeState.ANOMIC
-    ok("society anomic base=max(1,4-2)=2", n.binding_level == 2)
+    tr.ok("society anomic base=max(1,4-2)=2", n.binding_level == 2)
     n.normative_state = NormativeState.COLLAPSED
-    ok("collapsed → binding=1", n.binding_level == 1)
+    tr.ok("collapsed → binding=1", n.binding_level == 1)
 
     # 2. Trust capital modifier
     print("\n[2] Trust capital modifier")
@@ -430,11 +420,11 @@ def _run_tests() -> bool:
     n.is_empirically_studied = True
     n.trust_capital = 0.9
     n.n_observations = 5
-    ok("institution+high_trust → 5", n.binding_level == 5)
+    tr.ok("institution+high_trust → 5", n.binding_level == 5)
 
     n2 = SocioNode("n3", SociologyScale.INSTITUTION)
     n2.trust_capital = 0.1
-    ok("low trust capital reduces binding", n2.binding_level < 4)
+    tr.ok("low trust capital reduces binding", n2.binding_level < 4)
 
     # 3. Cohesion verdicts
     print("\n[3] Cohesion verdicts")
@@ -442,51 +432,51 @@ def _run_tests() -> bool:
     child = SocioNode("child", SociologyScale.GROUP)
     n.add_constituent(child)
     n.coherence_score = 0.9
-    ok("0.9 → COHERENT", n.cohesion_verdict == SocialCohesionVerdict.COHERENT)
+    tr.ok("0.9 → COHERENT", n.cohesion_verdict == SocialCohesionVerdict.COHERENT)
     n.coherence_score = 0.5
-    ok("0.5 → PARTIAL", n.cohesion_verdict == SocialCohesionVerdict.PARTIAL)
+    tr.ok("0.5 → PARTIAL", n.cohesion_verdict == SocialCohesionVerdict.PARTIAL)
     n.coherence_score = 0.3
-    ok("0.3 → INCOHERENT", n.cohesion_verdict == SocialCohesionVerdict.INCOHERENT)
+    tr.ok("0.3 → INCOHERENT", n.cohesion_verdict == SocialCohesionVerdict.INCOHERENT)
     n.coherence_score = 0.1
-    ok("0.1 → COLLAPSED", n.cohesion_verdict == SocialCohesionVerdict.COLLAPSED)
+    tr.ok("0.1 → COLLAPSED", n.cohesion_verdict == SocialCohesionVerdict.COLLAPSED)
 
     # 4. Leaf always COHERENT
     print("\n[4] Leaf cohesion")
     leaf = SocioNode("leaf", SociologyScale.INDIVIDUAL)
     leaf.coherence_score = 0.0
-    ok("leaf always COHERENT", leaf.cohesion_verdict == SocialCohesionVerdict.COHERENT)
+    tr.ok("leaf always COHERENT", leaf.cohesion_verdict == SocialCohesionVerdict.COHERENT)
 
     # 5. Verdict rules
     print("\n[5] Verdict rules")
     n = SocioNode("v1", SociologyScale.COMMUNITY)
     n.normative_state = NormativeState.COLLAPSED
     n.n_observations = 10
-    ok("COLLAPSED → VOID", n.verdict == SocioVerdict.SOCIO_VOID)
+    tr.ok("COLLAPSED → VOID", n.verdict == SocioVerdict.SOCIO_VOID)
 
     n2 = SocioNode("v2", SociologyScale.COMMUNITY)
     n2.coherence_score = 0.05
     n2.add_constituent(SocioNode("x", SociologyScale.GROUP))
     n2.n_observations = 10
-    ok("cohesion COLLAPSED → VOID", n2.verdict == SocioVerdict.SOCIO_VOID)
+    tr.ok("cohesion COLLAPSED → VOID", n2.verdict == SocioVerdict.SOCIO_VOID)
 
     n3 = SocioNode("v3", SociologyScale.INSTITUTION)
     n3.n_observations = 0
-    ok("no obs → GATHER", n3.verdict == SocioVerdict.SOCIO_GATHER)
+    tr.ok("no obs → GATHER", n3.verdict == SocioVerdict.SOCIO_GATHER)
 
     n4 = SocioNode("v4", SociologyScale.INSTITUTION)
     n4.coherence_score = 0.9
     n4.is_empirically_studied = True
     n4.n_observations = 10
     n4.trust_capital = 0.9
-    ok("measured+high+trust → AFFIRM", n4.verdict == SocioVerdict.SOCIO_AFFIRM)
+    tr.ok("measured+high+trust → AFFIRM", n4.verdict == SocioVerdict.SOCIO_AFFIRM)
 
     # 6. Observe convergence
     print("\n[6] Observe convergence")
     n = SocioNode("obs", SociologyScale.GROUP)
     for _ in range(20):
         n.observe(0.9)
-    ok("20 high obs → coherence>=0.7", n.coherence_score >= 0.7)
-    ok("n_observations=20", n.n_observations == 20)
+    tr.ok("20 high obs → coherence>=0.7", n.coherence_score >= 0.7)
+    tr.ok("n_observations=20", n.n_observations == 20)
 
     # 7. Social bonds
     print("\n[7] Social bonds")
@@ -495,24 +485,24 @@ def _run_tests() -> bool:
     b2 = SocialBond("b2", "a", "c", strength=0.3, is_strong_tie=False)
     n.add_bond(b1)
     n.add_bond(b2)
-    ok("n_bonds=2", len(n.social_bonds) == 2)
-    ok("mean_tie_strength=0.55", abs(n.mean_tie_strength - 0.55) < 0.001)
-    ok("strong_tie_fraction=0.5", abs(n.strong_tie_fraction - 0.5) < 0.001)
+    tr.ok("n_bonds=2", len(n.social_bonds) == 2)
+    tr.ok("mean_tie_strength=0.55", abs(n.mean_tie_strength - 0.55) < 0.001)
+    tr.ok("strong_tie_fraction=0.5", abs(n.strong_tie_fraction - 0.5) < 0.001)
 
     # 8. Build society federation
     print("\n[8] Society federation builder")
     fed = build_society_federation("soc-001")
     a = fed.audit()
-    ok("6 nodes", a.total_nodes == 6)
-    ok("depth=5", a.max_depth == 5)
-    ok("INDIVIDUAL present", "INDIVIDUAL" in a.scales_present)
-    ok("SOCIETY present", "SOCIETY" in a.scales_present)
+    tr.ok("6 nodes", a.total_nodes == 6)
+    tr.ok("depth=5", a.max_depth == 5)
+    tr.ok("INDIVIDUAL present", "INDIVIDUAL" in a.scales_present)
+    tr.ok("SOCIETY present", "SOCIETY" in a.scales_present)
 
     # 9. All gather (no observations)
     print("\n[9] All gather")
     fed = build_society_federation("gather-001")
     a = fed.audit()
-    ok("all gather", a.gather_count == a.total_nodes)
+    tr.ok("all gather", a.gather_count == a.total_nodes)
 
     # 10. All affirm with good observations
     print("\n[10] All affirm")
@@ -523,9 +513,9 @@ def _run_tests() -> bool:
         for _ in range(10):
             node.observe(0.95)
     a = fed.audit()
-    ok("affirm>0", a.affirm_count > 0)
-    ok("void=0", a.void_count == 0)
-    ok("verdict=AFFIRM", a.verdict == SocioVerdict.SOCIO_AFFIRM)
+    tr.ok("affirm>0", a.affirm_count > 0)
+    tr.ok("void=0", a.void_count == 0)
+    tr.ok("verdict=AFFIRM", a.verdict == SocioVerdict.SOCIO_AFFIRM)
 
     # 11. Normative collapse propagates
     print("\n[11] Normative COLLAPSED propagates")
@@ -536,9 +526,9 @@ def _run_tests() -> bool:
     ind = fed.get_node("individual-001")
     ind.normative_state = NormativeState.COLLAPSED
     a = fed.audit()
-    ok("collapsed_normative>=1", a.collapsed_normative_count >= 1)
-    ok("void>=1", a.void_count >= 1)
-    ok("verdict VOID", a.verdict == SocioVerdict.SOCIO_VOID)
+    tr.ok("collapsed_normative>=1", a.collapsed_normative_count >= 1)
+    tr.ok("void>=1", a.void_count >= 1)
+    tr.ok("verdict VOID", a.verdict == SocioVerdict.SOCIO_VOID)
 
     # 12. Deduplication
     print("\n[12] add_constituent deduplication")
@@ -546,7 +536,7 @@ def _run_tests() -> bool:
     child = SocioNode("child-u", SociologyScale.DYAD)
     parent.add_constituent(child)
     parent.add_constituent(child)
-    ok("no duplicates", len(parent.constituent_actors) == 1)
+    tr.ok("no duplicates", len(parent.constituent_actors) == 1)
 
     # 13. Snapshot
     print("\n[13] Snapshot")
@@ -556,9 +546,9 @@ def _run_tests() -> bool:
     n.n_observations = 5
     n.trust_capital = 0.7
     s = snap_socio(n)
-    ok("snap: scale=COMMUNITY", s.scale == SociologyScale.COMMUNITY)
-    ok("snap: is_studied=True", s.is_empirically_studied)
-    ok("snap: trust_capital=0.7", abs(s.trust_capital - 0.7) < 0.001)
+    tr.ok("snap: scale=COMMUNITY", s.scale == SociologyScale.COMMUNITY)
+    tr.ok("snap: is_studied=True", s.is_empirically_studied)
+    tr.ok("snap: trust_capital=0.7", abs(s.trust_capital - 0.7) < 0.001)
 
     # 14. Recursive counts
     print("\n[14] Recursive depth and count")
@@ -567,23 +557,17 @@ def _run_tests() -> bool:
     c2 = SocioNode("c2", SociologyScale.COMMUNITY)
     c1.add_constituent(c2)
     root.add_constituent(c1)
-    ok("depth=2", root.recursive_depth == 2)
-    ok("total_count=3", root.total_actor_count == 3)
+    tr.ok("depth=2", root.recursive_depth == 2)
+    tr.ok("total_count=3", root.total_actor_count == 3)
 
     # 15. Summary text
     print("\n[15] Summary sanity")
     fed = build_society_federation("summary-001")
     a = fed.audit()
-    ok("summary non-empty", len(a.summary) > 20)
-    ok("summary contains verdict", a.verdict.value in a.summary)
+    tr.ok("summary non-empty", len(a.summary) > 20)
+    tr.ok("summary contains verdict", a.verdict.value in a.summary)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

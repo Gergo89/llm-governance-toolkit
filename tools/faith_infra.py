@@ -43,6 +43,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -187,18 +188,6 @@ _FIELD_ATT_THRESH     = 0.30
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _safe_float(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
-def _clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
-
 def _tier_from_conf(conf: float, reinforced: bool) -> BeliefTier:
     if reinforced and conf >= _AXIOM_FLOOR:
         return BeliefTier.AXIOM_FAITH
@@ -234,8 +223,8 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
 
     # Validate / clamp signal parameters
     max_hops      = max(1, int(signal.max_hops))
-    damp          = _clamp01(_safe_float(signal.dampening_factor, 0.90))
-    conv_bonus    = _clamp01(_safe_float(signal.convergence_bonus, 0.10))
+    damp          = _c01(_sf(signal.dampening_factor, 0.90))
+    conv_bonus    = _c01(_sf(signal.convergence_bonus, 0.10))
 
     # Build index structures
     node_map: dict[str, BeliefNode] = {n.node_id: n for n in signal.nodes}
@@ -243,7 +232,7 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
     adj: dict[str, list[tuple[str, float]]] = {n.node_id: [] for n in signal.nodes}
     for lk in signal.links:
         if lk.source_id in adj:
-            tc = _clamp01(_safe_float(lk.trust_coefficient, 0.70))
+            tc = _c01(_sf(lk.trust_coefficient, 0.70))
             adj[lk.source_id].append((lk.target_id, tc))
 
     # reached[node_id] = (best_confidence, path_count, min_hops)
@@ -254,7 +243,7 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
     queue: deque[tuple[str, float, int]] = deque()   # (node_id, conf, hop)
     for node in signal.nodes:
         if node.belief_id == signal.belief_id and node.is_anchor:
-            conf = _clamp01(_safe_float(node.confidence, 0.80))
+            conf = _c01(_sf(node.confidence, 0.80))
             queue.append((node.node_id, conf, 0))
             reached.setdefault(node.node_id, []).append(conf)
             hop_dist[node.node_id] = 0
@@ -263,7 +252,7 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
     if not queue:
         for node in signal.nodes:
             if node.belief_id == signal.belief_id:
-                conf = _clamp01(_safe_float(node.confidence, 0.50))
+                conf = _c01(_sf(node.confidence, 0.50))
                 queue.append((node.node_id, conf, 0))
                 reached.setdefault(node.node_id, []).append(conf)
                 hop_dist[node.node_id] = 0
@@ -289,7 +278,7 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
             continue
         src_node = node_map.get(src_id)
         sceptic_mult = _SCEPTIC_DAMPEN if (src_node and src_node.sceptic) else 1.0
-        trust_w = _clamp01(_safe_float(
+        trust_w = _c01(_sf(
             src_node.trust_weight if src_node else 0.70, 0.70))
 
         for tgt_id, tc in adj.get(src_id, []):
@@ -299,7 +288,7 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
             visited_edges.add(edge_key)
 
             out_conf = src_conf * trust_w * tc * damp * sceptic_mult
-            out_conf = _clamp01(out_conf)
+            out_conf = _c01(out_conf)
 
             if out_conf <= 0.0:
                 continue
@@ -318,7 +307,7 @@ def propagate(signal: PropagationSignal) -> PropagationResult:
         base_conf   = max(confs)   # max-of-paths; trust the strongest route
         # Convergence bonus: each additional independent path adds bonus
         bonus       = conv_bonus * (path_count - 1)
-        final_conf  = _clamp01(base_conf + bonus)
+        final_conf  = _c01(base_conf + bonus)
         reinforced  = path_count >= 2
         reachability[nid] = NodeReach(
             node_id=nid,
@@ -496,26 +485,13 @@ def doubt_link(src: str, tgt: str) -> PropagationLink:
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
 
-    passed = 0
-    failed = 0
 
-    def ok(label: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("faith_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('faith_infra  —  unit tests')
+    tr.header()
 
     # ── Single anchor → single peer ──────────────────────────────────────────
-    print("\n--- single path propagation ---")
+    tr.section("single path propagation")
     sig1 = PropagationSignal(
         belief_id="B1",
         nodes=[
@@ -526,13 +502,13 @@ def _run_tests() -> None:
         max_hops=2, dampening_factor=0.90,
     )
     r1 = propagate(sig1)
-    ok("single path: B reached",           "B" in r1.reachability)
-    ok("single path: binding ≥ 3",         r1.binding >= 3)
-    ok("single path: verdict AFFIRM",
+    tr.ok("single path: B reached",           "B" in r1.reachability)
+    tr.ok("single path: binding ≥ 3",         r1.binding >= 3)
+    tr.ok("single path: verdict AFFIRM",
        r1.verdict in (PropagationVerdict.AFFIRM, PropagationVerdict.AMPLIFY))
 
     # ── Two paths converge → reinforcement ───────────────────────────────────
-    print("\n--- convergence / reinforcement ---")
+    tr.section("convergence / reinforcement")
     sig2 = PropagationSignal(
         belief_id="B2",
         nodes=[
@@ -547,13 +523,13 @@ def _run_tests() -> None:
         max_hops=2, dampening_factor=0.90,
     )
     r2 = propagate(sig2)
-    ok("two paths: TARGET reinforced",     r2.reachability["TARGET"].reinforced)
-    ok("two paths: reinforced_count ≥ 1",  r2.reinforced_count >= 1)
-    ok("two paths: binding ≥ single path", r2.binding >= r1.binding)
-    ok("two paths: AMPLIFY verdict",       r2.verdict == PropagationVerdict.AMPLIFY)
+    tr.ok("two paths: TARGET reinforced",     r2.reachability["TARGET"].reinforced)
+    tr.ok("two paths: reinforced_count ≥ 1",  r2.reinforced_count >= 1)
+    tr.ok("two paths: binding ≥ single path", r2.binding >= r1.binding)
+    tr.ok("two paths: AMPLIFY verdict",       r2.verdict == PropagationVerdict.AMPLIFY)
 
     # ── Sceptic node dampening ────────────────────────────────────────────────
-    print("\n--- sceptic dampening ---")
+    tr.section("sceptic dampening")
     sig_faith = PropagationSignal(
         belief_id="B3",
         nodes=[
@@ -578,11 +554,11 @@ def _run_tests() -> None:
     )
     r_faith   = propagate(sig_faith)
     r_sceptic = propagate(sig_sceptic)
-    ok("sceptic source → lower mean_conf",
+    tr.ok("sceptic source → lower mean_conf",
        r_sceptic.mean_confidence <= r_faith.mean_confidence)
 
     # ── No anchor — seed all nodes ────────────────────────────────────────────
-    print("\n--- no anchor, seed all ---")
+    tr.section("no anchor, seed all")
     sig_noanchor = PropagationSignal(
         belief_id="B4",
         nodes=[
@@ -593,11 +569,11 @@ def _run_tests() -> None:
         max_hops=2, dampening_factor=0.90,
     )
     r_na = propagate(sig_noanchor)
-    ok("no anchor: still propagates", r_na.verdict != PropagationVerdict.VOID)
-    ok("no anchor: binding ≥ 1",      r_na.binding >= 1)
+    tr.ok("no anchor: still propagates", r_na.verdict != PropagationVerdict.VOID)
+    tr.ok("no anchor: binding ≥ 1",      r_na.binding >= 1)
 
     # ── No matching belief nodes → VOID ──────────────────────────────────────
-    print("\n--- empty network / void ---")
+    tr.section("empty network / void")
     sig_void = PropagationSignal(
         belief_id="B_MISSING",
         nodes=[peer_node("X", "B_OTHER", confidence=0.80)],
@@ -605,11 +581,11 @@ def _run_tests() -> None:
         max_hops=2,
     )
     r_void = propagate(sig_void)
-    ok("no matching belief → VOID",   r_void.verdict == PropagationVerdict.VOID)
-    ok("VOID → binding=1",            r_void.binding == 1)
+    tr.ok("no matching belief → VOID",   r_void.verdict == PropagationVerdict.VOID)
+    tr.ok("VOID → binding=1",            r_void.binding == 1)
 
     # ── Dampening over many hops ──────────────────────────────────────────────
-    print("\n--- multi-hop dampening ---")
+    tr.section("multi-hop dampening")
     # Chain: A → B → C → D (3 hops, each dampening 0.80)
     sig_chain = PropagationSignal(
         belief_id="chain",
@@ -627,12 +603,12 @@ def _run_tests() -> None:
         max_hops=4, dampening_factor=0.80,
     )
     r_chain = propagate(sig_chain)
-    ok("chain: D reached",             "D" in r_chain.reachability)
-    ok("chain: D conf < A conf",       (r_chain.reachability["D"].final_confidence
+    tr.ok("chain: D reached",             "D" in r_chain.reachability)
+    tr.ok("chain: D conf < A conf",       (r_chain.reachability["D"].final_confidence
                                         < r_chain.reachability["A"].final_confidence))
 
     # ── Max hops respected ────────────────────────────────────────────────────
-    print("\n--- max hops boundary ---")
+    tr.section("max hops boundary")
     sig_deep = PropagationSignal(
         belief_id="deep",
         nodes=[
@@ -650,14 +626,14 @@ def _run_tests() -> None:
         dampening_factor=0.90,
     )
     r_deep = propagate(sig_deep)
-    ok("max_hops=2: C reachable",  "C" in r_deep.reachability)
+    tr.ok("max_hops=2: C reachable",  "C" in r_deep.reachability)
     # D is at hop=3 from A; E is at hop=4 — neither should be reached
     # (BFS stops when hop >= max_hops, so hops 0,1,2 are processed,
     #  producing hops 1,2,3 — D at hop3 is queued but stopped)
-    ok("max_hops=2: D not reached (hop=3)", "D" not in r_deep.reachability)
+    tr.ok("max_hops=2: D not reached (hop=3)", "D" not in r_deep.reachability)
 
     # ── Doubt link attenuates strongly ────────────────────────────────────────
-    print("\n--- doubt link ---")
+    tr.section("doubt link")
     sig_doubt = PropagationSignal(
         belief_id="B_d",
         nodes=[
@@ -678,25 +654,25 @@ def _run_tests() -> None:
     )
     r_doubt = propagate(sig_doubt)
     r_doubt_faith = propagate(sig_doubt_faith)
-    ok("doubt link → lower conf than faith link",
+    tr.ok("doubt link → lower conf than faith link",
        r_doubt.mean_confidence < r_doubt_faith.mean_confidence)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_belief_field([])
-    ok("empty field → RESONANT",       fa_empty.field_verdict == "RESONANT")
-    ok("empty field → mean_binding=5", fa_empty.mean_binding == 5.0)
+    tr.ok("empty field → RESONANT",       fa_empty.field_verdict == "RESONANT")
+    tr.ok("empty field → mean_binding=5", fa_empty.mean_binding == 5.0)
 
     # Resonant field
     results_amp = [r2]  # AMPLIFY
     fa_amp = audit_belief_field(results_amp * 5)
-    ok("all AMPLIFY → RESONANT",       fa_amp.field_verdict == "RESONANT")
+    tr.ok("all AMPLIFY → RESONANT",       fa_amp.field_verdict == "RESONANT")
 
     # Void-heavy field
     results_void = [r_void] * 4 + [r1]
     fa_void = audit_belief_field(results_void)
-    ok("mostly VOID → COLLAPSED",      fa_void.field_verdict == "COLLAPSED")
-    ok("COLLAPSED → void_count=4",     fa_void.void_count == 4)
+    tr.ok("mostly VOID → COLLAPSED",      fa_void.field_verdict == "COLLAPSED")
+    tr.ok("COLLAPSED → void_count=4",     fa_void.void_count == 4)
 
     # Attenuate-heavy field
     # Create a weakly-propagated result by using a very short max_hops + doubt
@@ -710,11 +686,11 @@ def _run_tests() -> None:
         max_hops=1, dampening_factor=0.50,
     )) for i in range(5)]
     fa_att = audit_belief_field(results_att)
-    ok("low-conf results → DISSIPATING or COLLAPSED",
+    tr.ok("low-conf results → DISSIPATING or COLLAPSED",
        fa_att.field_verdict in ("DISSIPATING", "COLLAPSED"))
 
     # ── Sentinel & edge cases ─────────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     nan_sig = PropagationSignal(
         belief_id="nan_B",
@@ -723,7 +699,7 @@ def _run_tests() -> None:
         max_hops=2, dampening_factor=float("nan"),
     )
     r_nan = propagate(nan_sig)
-    ok("NaN inputs → valid binding",   1 <= r_nan.binding <= 5)
+    tr.ok("NaN inputs → valid binding",   1 <= r_nan.binding <= 5)
 
     inf_sig = PropagationSignal(
         belief_id="inf_B",
@@ -732,7 +708,7 @@ def _run_tests() -> None:
         max_hops=2, dampening_factor=1.5,  # clamped to 1.0
     )
     r_inf = propagate(inf_sig)
-    ok("Inf inputs → valid binding",   1 <= r_inf.binding <= 5)
+    tr.ok("Inf inputs → valid binding",   1 <= r_inf.binding <= 5)
 
     # Idempotency
     sig_idem = PropagationSignal(
@@ -742,10 +718,10 @@ def _run_tests() -> None:
     )
     r_id1 = propagate(sig_idem)
     r_id2 = propagate(sig_idem)
-    ok("idempotency: same binding",    r_id1.binding == r_id2.binding)
+    tr.ok("idempotency: same binding",    r_id1.binding == r_id2.binding)
 
     # ── Trinity invariant ─────────────────────────────────────────────────────
-    print("\n--- trinity invariant ---")
+    tr.section("trinity invariant")
     # 3 anchor nodes all vouching for the same target → AXIOM-FAITH
     sig_trinity = PropagationSignal(
         belief_id="trinity",
@@ -763,20 +739,13 @@ def _run_tests() -> None:
         max_hops=2, dampening_factor=0.90, convergence_bonus=0.10,
     )
     r_trinity = propagate(sig_trinity)
-    ok("trinity: TARGET reinforced",       r_trinity.reachability["TARGET"].reinforced)
-    ok("trinity: binding = 5",             r_trinity.binding == 5)
-    ok("trinity: tier = AXIOM_FAITH",      r_trinity.tier == BeliefTier.AXIOM_FAITH)
-    ok("trinity: verdict = AMPLIFY",       r_trinity.verdict == PropagationVerdict.AMPLIFY)
+    tr.ok("trinity: TARGET reinforced",       r_trinity.reachability["TARGET"].reinforced)
+    tr.ok("trinity: binding = 5",             r_trinity.binding == 5)
+    tr.ok("trinity: tier = AXIOM_FAITH",      r_trinity.tier == BeliefTier.AXIOM_FAITH)
+    tr.ok("trinity: verdict = AMPLIFY",       r_trinity.verdict == PropagationVerdict.AMPLIFY)
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── mixing types ─────────────────────────────────────────────────────────────
@@ -321,20 +322,9 @@ def audit_mixing_surface(decisions: Sequence[MixingDecision]) -> MixingSurfaceAu
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("em_signal_mixing_infra.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('em_signal_mixing_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     soi = EMComponent("soi", 1e9, 1.0, 0.0, is_signal_of_interest=True, is_attested=True)
 
@@ -342,92 +332,92 @@ def _run_tests() -> bool:
     print("\n[1] Clean signal")
     mix = EMSignalMix("clean-001", (soi,), snr_db=40.0, chain_attested=True)
     d = analyse_mixing(mix)
-    ok("clean: verdict=CLEAN", d.verdict == MixingVerdict.MIX_CLEAN)
-    ok("clean: integrity>=0.9", d.signal_integrity_score >= 0.9)
-    ok("clean: binding=5", d.binding_level == 5)
+    tr.ok("clean: verdict=CLEAN", d.verdict == MixingVerdict.MIX_CLEAN)
+    tr.ok("clean: integrity>=0.9", d.signal_integrity_score >= 0.9)
+    tr.ok("clean: binding=5", d.binding_level == 5)
 
     # 2. Superposition — benign
     print("\n[2] Superposition")
     intfr = EMComponent("i1", 2e9, 0.1, 0.5, is_signal_of_interest=False)
     mix = EMSignalMix("super-001", (soi, intfr), snr_db=30.0)
     d = analyse_mixing(mix)
-    ok("super: SUPERPOSITION present",
+    tr.ok("super: SUPERPOSITION present",
        MixingType.SUPERPOSITION in d.mixing_types)
-    ok("super: verdict not VOID", d.verdict != MixingVerdict.MIX_VOID)
+    tr.ok("super: verdict not VOID", d.verdict != MixingVerdict.MIX_VOID)
 
     # 3. Destructive interference
     print("\n[3] Destructive interference")
     intfr_dest = EMComponent("i-dest", 1e9, 0.8, math.pi, is_signal_of_interest=False)
     mix = EMSignalMix("dest-001", (soi, intfr_dest), snr_db=20.0)
     d = analyse_mixing(mix)
-    ok("dest: DESTRUCTIVE_INTERFERENCE detected",
+    tr.ok("dest: DESTRUCTIVE_INTERFERENCE detected",
        MixingType.DESTRUCTIVE_INTERFERENCE in d.mixing_types)
-    ok("dest: severity>=2", d.max_severity >= 2)
+    tr.ok("dest: severity>=2", d.max_severity >= 2)
 
     # 4. Constructive interference
     print("\n[4] Constructive interference")
     intfr_cons = EMComponent("i-cons", 1e9, 0.5, 0.1, is_signal_of_interest=False)
     mix = EMSignalMix("cons-001", (soi, intfr_cons), snr_db=35.0)
     d = analyse_mixing(mix)
-    ok("cons: CONSTRUCTIVE_INTERFERENCE detected",
+    tr.ok("cons: CONSTRUCTIVE_INTERFERENCE detected",
        MixingType.CONSTRUCTIVE_INTERFERENCE in d.mixing_types)
 
     # 5. Intermodulation
     print("\n[5] Intermodulation (low IIP3)")
     mix = EMSignalMix("im-001", (soi, intfr), snr_db=20.0, iip3_dbm=5.0)
     d = analyse_mixing(mix)
-    ok("IM: INTERMODULATION detected",
+    tr.ok("IM: INTERMODULATION detected",
        MixingType.INTERMODULATION in d.mixing_types)
-    ok("IM: severity=3", d.max_severity == 3)
-    ok("IM: verdict VOID or CORRUPT",
+    tr.ok("IM: severity=3", d.max_severity == 3)
+    tr.ok("IM: verdict VOID or CORRUPT",
        d.verdict in (MixingVerdict.MIX_VOID, MixingVerdict.MIX_CORRUPT))
 
     # 6. Cross-modulation
     print("\n[6] Cross-modulation")
     mix = EMSignalMix("cm-001", (soi,), snr_db=25.0, cross_mod_index=0.25)
     d = analyse_mixing(mix)
-    ok("CM: CROSS_MODULATION detected",
+    tr.ok("CM: CROSS_MODULATION detected",
        MixingType.CROSS_MODULATION in d.mixing_types)
-    ok("CM: severity=2", d.max_severity == 2)
+    tr.ok("CM: severity=2", d.max_severity == 2)
 
     # 7. Spectral leakage
     print("\n[7] Spectral leakage")
     mix = EMSignalMix("leak-001", (soi,), snr_db=30.0,
                       target_band_energy_fraction=0.75)
     d = analyse_mixing(mix)
-    ok("leak: SPECTRAL_LEAKAGE detected",
+    tr.ok("leak: SPECTRAL_LEAKAGE detected",
        MixingType.SPECTRAL_LEAKAGE in d.mixing_types)
 
     # 8. Low SNR → VOID
     print("\n[8] Low SNR → VOID")
     mix = EMSignalMix("lowsnr-001", (soi,), snr_db=1.0)
     d = analyse_mixing(mix)
-    ok("low SNR → VOID", d.verdict == MixingVerdict.MIX_VOID)
-    ok("low SNR: binding=1", d.binding_level == 1)
+    tr.ok("low SNR → VOID", d.verdict == MixingVerdict.MIX_VOID)
+    tr.ok("low SNR: binding=1", d.binding_level == 1)
 
     # 9. Chain attestation boost
     print("\n[9] Chain attestation binding boost")
     mix = EMSignalMix("chain-001", (soi,), snr_db=40.0, chain_attested=True)
     d = analyse_mixing(mix)
-    ok("chain attested → binding=5", d.binding_level == 5)
+    tr.ok("chain attested → binding=5", d.binding_level == 5)
 
     mix_no_chain = EMSignalMix("nochain-001", (soi,), snr_db=40.0, chain_attested=False)
     d2 = analyse_mixing(mix_no_chain)
-    ok("no chain: binding=4", d2.binding_level == 4)
+    tr.ok("no chain: binding=4", d2.binding_level == 4)
 
     # 10. Multiple mixing types
     print("\n[10] Multiple mixing types")
     mix = EMSignalMix("multi-001", (soi, intfr_dest), snr_db=18.0,
                       cross_mod_index=0.20, target_band_energy_fraction=0.70)
     d = analyse_mixing(mix)
-    ok("multi: multiple mixing types", len(d.mixing_types) >= 2)
+    tr.ok("multi: multiple mixing types", len(d.mixing_types) >= 2)
 
     # 11. Reason text
     print("\n[11] Reason text")
     mix = EMSignalMix("reason-001", (soi,), snr_db=25.0, cross_mod_index=0.20)
     d = analyse_mixing(mix)
-    ok("reason non-empty", len(d.reason) > 10)
-    ok("reason has SNR", "SNR" in d.reason)
+    tr.ok("reason non-empty", len(d.reason) > 10)
+    tr.ok("reason has SNR", "SNR" in d.reason)
 
     # 12. Surface audit — clean
     print("\n[12] Surface audit — clean")
@@ -436,7 +426,7 @@ def _run_tests() -> bool:
         MixingDecision("m2", (MixingType.CLEAN,), 0, MixingVerdict.MIX_CLEAN, 5, 0.97, ""),
     ]
     audit = audit_mixing_surface(decisions)
-    ok("clean surface", audit.surface_verdict == MixingSurfaceVerdict.SURFACE_CLEAN)
+    tr.ok("clean surface", audit.surface_verdict == MixingSurfaceVerdict.SURFACE_CLEAN)
 
     # 13. Surface audit — corrupt
     print("\n[13] Surface audit — corrupt")
@@ -445,14 +435,14 @@ def _run_tests() -> bool:
                        MixingVerdict.MIX_VOID, 1, 0.1, ""),
     ]
     audit = audit_mixing_surface(decisions)
-    ok("void → SURFACE_CORRUPT",
+    tr.ok("void → SURFACE_CORRUPT",
        audit.surface_verdict == MixingSurfaceVerdict.SURFACE_CORRUPT)
 
     # 14. Empty mix
     print("\n[14] Empty component mix")
     mix = EMSignalMix("empty-001", (), snr_db=40.0)
     d = analyse_mixing(mix)
-    ok("empty: verdict=CLEAN", d.verdict == MixingVerdict.MIX_CLEAN)
+    tr.ok("empty: verdict=CLEAN", d.verdict == MixingVerdict.MIX_CLEAN)
 
     # 15. Phase difference calculation
     print("\n[15] Phase difference logic")
@@ -460,15 +450,9 @@ def _run_tests() -> bool:
     in_phase_intfr = EMComponent("ip", 1e9, 0.5, 0.05, is_signal_of_interest=False)
     mix = EMSignalMix("phase-001", (soi, in_phase_intfr), snr_db=35.0)
     d = analyse_mixing(mix)
-    ok("in-phase → constructive", MixingType.CONSTRUCTIVE_INTERFERENCE in d.mixing_types)
+    tr.ok("in-phase → constructive", MixingType.CONSTRUCTIVE_INTERFERENCE in d.mixing_types)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

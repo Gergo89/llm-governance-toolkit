@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
+from governance_core import TestRunner
 
 
 # ─── emergence scale ──────────────────────────────────────────────────────────
@@ -333,49 +334,38 @@ def build_micro_to_hyper_chain(federation_id: str) -> RecursiveEmergenceFederati
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("recursive_emergence_federation.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('recursive_emergence_federation.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Node binding level from scale
     print("\n[1] Binding level from scale")
     n = EmergenceNode("n1", EmergenceScale.MACRO)
-    ok("macro base binding=3", n.binding_level == 3)
+    tr.ok("macro base binding=3", n.binding_level == 3)
     n.coherence_score = 0.9
     n.is_attested = True
-    ok("macro+high_coh+attested binding=4", n.binding_level == 4)
+    tr.ok("macro+high_coh+attested binding=4", n.binding_level == 4)
     n.coherence_score = 0.3
-    ok("macro+low_coh binding=2", n.binding_level == 2)
+    tr.ok("macro+low_coh binding=2", n.binding_level == 2)
 
     # 2. Coherence verdict thresholds
     print("\n[2] Coherence verdicts")
     n = EmergenceNode("n2", EmergenceScale.MESO)
     n.children = [EmergenceNode("child", EmergenceScale.MICRO)]
     n.coherence_score = 0.9
-    ok("0.9 → COHERENT", n.coherence_verdict == CoherenceVerdict.COHERENT)
+    tr.ok("0.9 → COHERENT", n.coherence_verdict == CoherenceVerdict.COHERENT)
     n.coherence_score = 0.6
-    ok("0.6 → PARTIAL", n.coherence_verdict == CoherenceVerdict.PARTIAL)
+    tr.ok("0.6 → PARTIAL", n.coherence_verdict == CoherenceVerdict.PARTIAL)
     n.coherence_score = 0.3
-    ok("0.3 → INCOHERENT", n.coherence_verdict == CoherenceVerdict.INCOHERENT)
+    tr.ok("0.3 → INCOHERENT", n.coherence_verdict == CoherenceVerdict.INCOHERENT)
     n.coherence_score = 0.1
-    ok("0.1 → COLLAPSED", n.coherence_verdict == CoherenceVerdict.COLLAPSED)
+    tr.ok("0.1 → COLLAPSED", n.coherence_verdict == CoherenceVerdict.COLLAPSED)
 
     # 3. Leaf node always COHERENT
     print("\n[3] Leaf node coherence")
     leaf = EmergenceNode("leaf", EmergenceScale.MICRO)
     leaf.coherence_score = 0.0   # extreme low — but no children
-    ok("leaf always COHERENT", leaf.coherence_verdict == CoherenceVerdict.COHERENT)
+    tr.ok("leaf always COHERENT", leaf.coherence_verdict == CoherenceVerdict.COHERENT)
 
     # 4. Verdict rules
     print("\n[4] Verdict rules")
@@ -383,26 +373,26 @@ def _run_tests() -> bool:
     n.coherence_score = 0.05  # COLLAPSED
     n.children = [EmergenceNode("c", EmergenceScale.MACRO)]
     n.n_observations = 10
-    ok("COLLAPSED → VOID", n.verdict == EmergenceVerdict.EMERGE_VOID)
+    tr.ok("COLLAPSED → VOID", n.verdict == EmergenceVerdict.EMERGE_VOID)
 
     n2 = EmergenceNode("v2", EmergenceScale.META)
     n2.coherence_score = 0.9
     n2.is_attested = True
     n2.n_observations = 10
-    ok("high bind → AFFIRM", n2.verdict == EmergenceVerdict.EMERGE_AFFIRM)
+    tr.ok("high bind → AFFIRM", n2.verdict == EmergenceVerdict.EMERGE_AFFIRM)
 
     n3 = EmergenceNode("v3", EmergenceScale.MICRO)
     n3.coherence_score = 0.9
     n3.n_observations = 0
-    ok("no obs → GATHER", n3.verdict == EmergenceVerdict.EMERGE_GATHER)
+    tr.ok("no obs → GATHER", n3.verdict == EmergenceVerdict.EMERGE_GATHER)
 
     # 5. Observe updates coherence
     print("\n[5] Observe convergence")
     n = EmergenceNode("obs", EmergenceScale.MESO)
     for _ in range(20):
         n.observe(0.9)
-    ok("20 high obs → coherence>=0.7", n.coherence_score >= 0.7)
-    ok("n_observations=20", n.n_observations == 20)
+    tr.ok("20 high obs → coherence>=0.7", n.coherence_score >= 0.7)
+    tr.ok("n_observations=20", n.n_observations == 20)
 
     # 6. Observe decline
     n2 = EmergenceNode("obs2", EmergenceScale.MESO)
@@ -410,7 +400,7 @@ def _run_tests() -> bool:
     n2.n_observations = 5
     for _ in range(30):
         n2.observe(0.1)
-    ok("30 low obs from 0.9 → coherence declines", n2.coherence_score < 0.5)
+    tr.ok("30 low obs from 0.9 → coherence declines", n2.coherence_score < 0.5)
 
     # 7. Snapshot
     print("\n[7] Snapshot")
@@ -421,24 +411,24 @@ def _run_tests() -> bool:
     n.is_attested = True
     n.n_observations = 5
     s = snap_node(n)
-    ok("snap: depth=1", s.depth == 1)
-    ok("snap: n_children=1", s.n_children == 1)
-    ok("snap: is_attested=True", s.is_attested)
-    ok("snap: scale=MACRO", s.scale == EmergenceScale.MACRO)
+    tr.ok("snap: depth=1", s.depth == 1)
+    tr.ok("snap: n_children=1", s.n_children == 1)
+    tr.ok("snap: is_attested=True", s.is_attested)
+    tr.ok("snap: scale=MACRO", s.scale == EmergenceScale.MACRO)
 
     # 8. build_micro_to_hyper_chain
     print("\n[8] Micro-to-hyper chain")
     fed = build_micro_to_hyper_chain("test-chain")
-    ok("5 nodes total", fed.audit().total_nodes == 5)
-    ok("root is HYPER", fed.root.scale == EmergenceScale.HYPER)
-    ok("depth=4", _recursive_depth(fed.root) == 4)
+    tr.ok("5 nodes total", fed.audit().total_nodes == 5)
+    tr.ok("root is HYPER", fed.root.scale == EmergenceScale.HYPER)
+    tr.ok("depth=4", _recursive_depth(fed.root) == 4)
 
     # 9. Audit on chain — all gathering (no obs)
     print("\n[9] Chain audit with no observations")
     fed = build_micro_to_hyper_chain("gather-chain")
     a = fed.audit()
-    ok("gather_count>0", a.gather_count > 0)
-    ok("verdict≠AFFIRM", a.verdict != EmergenceVerdict.EMERGE_AFFIRM)
+    tr.ok("gather_count>0", a.gather_count > 0)
+    tr.ok("verdict≠AFFIRM", a.verdict != EmergenceVerdict.EMERGE_AFFIRM)
 
     # 10. Audit with all high coherence
     print("\n[10] Chain audit with high coherence observations")
@@ -448,9 +438,9 @@ def _run_tests() -> bool:
         for _ in range(10):
             node.observe(0.95)
     a = fed.audit()
-    ok("affirm_count>0", a.affirm_count > 0)
-    ok("verdict=AFFIRM", a.verdict == EmergenceVerdict.EMERGE_AFFIRM)
-    ok("global_coherence>=0.7", a.global_coherence >= 0.7)
+    tr.ok("affirm_count>0", a.affirm_count > 0)
+    tr.ok("verdict=AFFIRM", a.verdict == EmergenceVerdict.EMERGE_AFFIRM)
+    tr.ok("global_coherence>=0.7", a.global_coherence >= 0.7)
 
     # 11. Void propagates to global verdict
     print("\n[11] VOID node propagates to global verdict")
@@ -463,8 +453,8 @@ def _run_tests() -> bool:
     micro.coherence_score = 0.05
     micro.children = [EmergenceNode("dummy", EmergenceScale.MICRO)]
     a = fed.audit()
-    ok("void_count>=1 when micro collapsed", a.void_count >= 1)
-    ok("global verdict VOID", a.verdict == EmergenceVerdict.EMERGE_VOID)
+    tr.ok("void_count>=1 when micro collapsed", a.void_count >= 1)
+    tr.ok("global verdict VOID", a.verdict == EmergenceVerdict.EMERGE_VOID)
 
     # 12. add_child prevents duplicates
     print("\n[12] add_child prevents duplicates")
@@ -472,22 +462,22 @@ def _run_tests() -> bool:
     child = EmergenceNode("c1", EmergenceScale.MESO)
     parent.add_child(child)
     parent.add_child(child)
-    ok("no duplicate children", len(parent.children) == 1)
+    tr.ok("no duplicate children", len(parent.children) == 1)
 
     # 13. Scales present in audit
     print("\n[13] Scales present in audit")
     fed = build_micro_to_hyper_chain("scales-check")
     a = fed.audit()
-    ok("MICRO in scales", "MICRO" in a.scales_present)
-    ok("HYPER in scales", "HYPER" in a.scales_present)
-    ok("5 distinct scales", len(a.scales_present) == 5)
+    tr.ok("MICRO in scales", "MICRO" in a.scales_present)
+    tr.ok("HYPER in scales", "HYPER" in a.scales_present)
+    tr.ok("5 distinct scales", len(a.scales_present) == 5)
 
     # 14. Summary text
     print("\n[14] Summary sanity")
     fed = build_micro_to_hyper_chain("summary")
     a = fed.audit()
-    ok("summary non-empty", len(a.summary) > 20)
-    ok("summary contains federation_id", "summary" in a.summary)
+    tr.ok("summary non-empty", len(a.summary) > 20)
+    tr.ok("summary contains federation_id", "summary" in a.summary)
 
     # 15. RecursiveEmergenceFederation register_node
     print("\n[15] register_node adds to index")
@@ -496,7 +486,7 @@ def _run_tests() -> bool:
     new_node = EmergenceNode("new", EmergenceScale.MICRO)
     root.add_child(new_node)
     fed.register_node(new_node)
-    ok("new node in all_nodes", "new" in fed._all_nodes)
+    tr.ok("new node in all_nodes", "new" in fed._all_nodes)
 
     # 16. Recursive depth calculation
     print("\n[16] Recursive depth")
@@ -505,17 +495,11 @@ def _run_tests() -> bool:
     l2 = EmergenceNode("l2", EmergenceScale.MACRO)
     l1.add_child(l2)
     l0.add_child(l1)
-    ok("depth l0=2", _recursive_depth(l0) == 2)
-    ok("depth l1=1", _recursive_depth(l1) == 1)
-    ok("depth l2=0", _recursive_depth(l2) == 0)
+    tr.ok("depth l0=2", _recursive_depth(l0) == 2)
+    tr.ok("depth l1=1", _recursive_depth(l1) == 1)
+    tr.ok("depth l2=0", _recursive_depth(l2) == 0)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

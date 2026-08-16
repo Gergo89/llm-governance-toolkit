@@ -40,6 +40,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -343,138 +344,131 @@ def _sig(sid: str, **kw) -> BioSignal:
 
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('bio_signal_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # ── Group A: trusted / clean ──────────────────────────────────────────────
     d = evaluate_bio(_sig("A01", hardware_attested=True, anti_replay_passed=True))
-    check("UT-A01: hw+anti-replay → TRUSTED, bind=5", d.verdict, BioVerdict.TRUSTED)
-    check("UT-A01b: binding == 5",                     d.binding_level, 5)
-    check("UT-A01c: AFFIRM",                            d.governance_action, "AFFIRM")
-    check("UT-A01d: PHYSIOLOGICAL_AUTHENTIC in threats",
+    tr.expect("UT-A01: hw+anti-replay → TRUSTED, bind=5", d.verdict, BioVerdict.TRUSTED)
+    tr.expect("UT-A01b: binding == 5",                     d.binding_level, 5)
+    tr.expect("UT-A01c: AFFIRM",                            d.governance_action, "AFFIRM")
+    tr.expect("UT-A01d: PHYSIOLOGICAL_AUTHENTIC in threats",
           BioThreat.PHYSIOLOGICAL_AUTHENTIC in d.threats, True)
 
     d = evaluate_bio(_sig("A02", hardware_attested=True))
-    check("UT-A02: hw only → TRUSTED, bind=4", d.verdict, BioVerdict.TRUSTED)
-    check("UT-A02b: binding == 4",              d.binding_level, 4)
+    tr.expect("UT-A02: hw only → TRUSTED, bind=4", d.verdict, BioVerdict.TRUSTED)
+    tr.expect("UT-A02b: binding == 4",              d.binding_level, 4)
 
     d = evaluate_bio(_sig("A03"))
-    check("UT-A03: no hw → PROVISIONAL, bind=3", d.verdict, BioVerdict.PROVISIONAL)
-    check("UT-A03b: binding == 3",               d.binding_level, 3)
+    tr.expect("UT-A03: no hw → PROVISIONAL, bind=3", d.verdict, BioVerdict.PROVISIONAL)
+    tr.expect("UT-A03b: binding == 3",               d.binding_level, 3)
 
     # ── Group B: liveness failure ─────────────────────────────────────────────
     d = evaluate_bio(_sig("B01", hrv_rmssd_ms=1.0))   # HRV < 5ms
-    check("UT-B01: HRV < 5ms → LIVENESS_FAILURE",
+    tr.expect("UT-B01: HRV < 5ms → LIVENESS_FAILURE",
           BioThreat.LIVENESS_FAILURE in d.threats, True)
-    check("UT-B01b: REJECTED", d.verdict, BioVerdict.REJECTED)
-    check("UT-B01c: VOID",     d.governance_action, "VOID")
-    check("UT-B01d: binding=1", d.binding_level, 1)
+    tr.expect("UT-B01b: REJECTED", d.verdict, BioVerdict.REJECTED)
+    tr.expect("UT-B01c: VOID",     d.governance_action, "VOID")
+    tr.expect("UT-B01d: binding=1", d.binding_level, 1)
 
     d = evaluate_bio(_sig("B02", heart_rate_bpm=300.0))
-    check("UT-B02: HR=300bpm → LIVENESS_FAILURE",
+    tr.expect("UT-B02: HR=300bpm → LIVENESS_FAILURE",
           BioThreat.LIVENESS_FAILURE in d.threats, True)
 
     d = evaluate_bio(_sig("B03", heart_rate_bpm=10.0))
-    check("UT-B03: HR=10bpm → LIVENESS_FAILURE",
+    tr.expect("UT-B03: HR=10bpm → LIVENESS_FAILURE",
           BioThreat.LIVENESS_FAILURE in d.threats, True)
 
     # ── Group C: GSR flatline ─────────────────────────────────────────────────
     d = evaluate_bio(_sig("C01", gsr_variance_us2=0.0))
-    check("UT-C01: GSR flatline → GSR_FLATLINE",
+    tr.expect("UT-C01: GSR flatline → GSR_FLATLINE",
           BioThreat.GSR_FLATLINE in d.threats, True)
-    check("UT-C01b: REJECTED", d.verdict, BioVerdict.REJECTED)
+    tr.expect("UT-C01b: REJECTED", d.verdict, BioVerdict.REJECTED)
 
     d = evaluate_bio(_sig("C02", gsr_variance_us2=0.01))
-    check("UT-C02: GSR active → no GSR_FLATLINE",
+    tr.expect("UT-C02: GSR active → no GSR_FLATLINE",
           BioThreat.GSR_FLATLINE in d.threats, False)
 
     # ── Group D: HRV anomaly (alive but out of clinical range) ────────────────
     d = evaluate_bio(_sig("D01", hrv_rmssd_ms=200.0))   # above max, but alive
-    check("UT-D01: HRV=200ms → HRV_ANOMALY",
+    tr.expect("UT-D01: HRV=200ms → HRV_ANOMALY",
           BioThreat.HRV_ANOMALY in d.threats, True)
-    check("UT-D01b: SUSPECT",    d.verdict, BioVerdict.SUSPECT)
-    check("UT-D01c: WITHHOLD",   d.governance_action, "WITHHOLD")
+    tr.expect("UT-D01b: SUSPECT",    d.verdict, BioVerdict.SUSPECT)
+    tr.expect("UT-D01c: WITHHOLD",   d.governance_action, "WITHHOLD")
 
     d = evaluate_bio(_sig("D02", hrv_rmssd_ms=8.0))   # low but above liveness threshold
-    check("UT-D02: HRV=8ms → HRV_ANOMALY (low)",
+    tr.expect("UT-D02: HRV=8ms → HRV_ANOMALY (low)",
           BioThreat.HRV_ANOMALY in d.threats, True)
 
     d = evaluate_bio(_sig("D03", hrv_rmssd_ms=60.0))   # within normal
-    check("UT-D03: HRV=60ms → no HRV_ANOMALY",
+    tr.expect("UT-D03: HRV=60ms → no HRV_ANOMALY",
           BioThreat.HRV_ANOMALY in d.threats, False)
 
     # ── Group E: EEG synchrony ────────────────────────────────────────────────
     d = evaluate_bio(_sig("E01", eeg_mean_coherence=0.98))
-    check("UT-E01: EEG coherence=0.98 → EEG_SYNC_ANOMALY (too high)",
+    tr.expect("UT-E01: EEG coherence=0.98 → EEG_SYNC_ANOMALY (too high)",
           BioThreat.EEG_SYNC_ANOMALY in d.threats, True)
 
     d = evaluate_bio(_sig("E02", eeg_mean_coherence=0.02))
-    check("UT-E02: EEG coherence=0.02 → EEG_SYNC_ANOMALY (too low)",
+    tr.expect("UT-E02: EEG coherence=0.02 → EEG_SYNC_ANOMALY (too low)",
           BioThreat.EEG_SYNC_ANOMALY in d.threats, True)
 
     d = evaluate_bio(_sig("E03", eeg_mean_coherence=0.5))
-    check("UT-E03: EEG coherence=0.5 → no anomaly",
+    tr.expect("UT-E03: EEG coherence=0.5 → no anomaly",
           BioThreat.EEG_SYNC_ANOMALY in d.threats, False)
 
     # ── Group F: deception signal ─────────────────────────────────────────────
     d = evaluate_bio(_sig("F01", elevated_channels=3))
-    check("UT-F01: 3 elevated channels → DECEPTION_SIGNAL",
+    tr.expect("UT-F01: 3 elevated channels → DECEPTION_SIGNAL",
           BioThreat.DECEPTION_SIGNAL in d.threats, True)
-    check("UT-F01b: SUSPECT", d.verdict, BioVerdict.SUSPECT)
+    tr.expect("UT-F01b: SUSPECT", d.verdict, BioVerdict.SUSPECT)
 
     d = evaluate_bio(_sig("F02", elevated_channels=2))
-    check("UT-F02: 2 elevated channels → no DECEPTION_SIGNAL",
+    tr.expect("UT-F02: 2 elevated channels → no DECEPTION_SIGNAL",
           BioThreat.DECEPTION_SIGNAL in d.threats, False)
 
     # ── Group G: liveness_score ───────────────────────────────────────────────
     d_alive = evaluate_bio(_sig("G01"))
     d_dead  = evaluate_bio(_sig("G02", hrv_rmssd_ms=0.0, heart_rate_bpm=0.0, gsr_variance_us2=0.0))
-    check("UT-G01: liveness_score(alive) > liveness_score(dead)",
+    tr.expect("UT-G01: liveness_score(alive) > liveness_score(dead)",
           d_alive.liveness_score > d_dead.liveness_score, True)
 
     # ── Group H: audit surface ────────────────────────────────────────────────
     clean = [_sig(f"H{i}", hardware_attested=True, anti_replay_passed=True) for i in range(5)]
     audit = audit_bio_surface(clean)
-    check("UT-H01: all trusted → SURFACE_CLEAN",  audit.surface_verdict, BioSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-H02: trusted == 5",                  audit.trusted, 5)
+    tr.expect("UT-H01: all trusted → SURFACE_CLEAN",  audit.surface_verdict, BioSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-H02: trusted == 5",                  audit.trusted, 5)
 
     one_rejected = [
         _sig("H10", hardware_attested=True, anti_replay_passed=True),
         _sig("H11", hrv_rmssd_ms=0.0),
     ]
     audit = audit_bio_surface(one_rejected)
-    check("UT-H03: 1 rejected → CONTAMINATED",
+    tr.expect("UT-H03: 1 rejected → CONTAMINATED",
           audit.surface_verdict, BioSurfaceVerdict.SURFACE_CONTAMINATED)
 
     three_rejected = [_sig(f"H2{i}", hrv_rmssd_ms=0.0) for i in range(3)]
     audit = audit_bio_surface(three_rejected)
-    check("UT-H04: 3 rejected → COMPROMISED",
+    tr.expect("UT-H04: 3 rejected → COMPROMISED",
           audit.surface_verdict, BioSurfaceVerdict.SURFACE_COMPROMISED)
 
     empty = audit_bio_surface([])
-    check("UT-H05: empty → SURFACE_CLEAN", empty.surface_verdict, BioSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-H05: empty → SURFACE_CLEAN", empty.surface_verdict, BioSurfaceVerdict.SURFACE_CLEAN)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
 
     # ST-01: 1000 healthy attested signals → all TRUSTED, SURFACE_CLEAN
     st1 = [_sig(f"s1_{i}", hardware_attested=True, anti_replay_passed=True) for i in range(1000)]
     a1 = audit_bio_surface(st1)
-    check("ST-01: 1000 clean → SURFACE_CLEAN", a1.surface_verdict, BioSurfaceVerdict.SURFACE_CLEAN)
-    check("ST-01b: trusted == 1000",            a1.trusted, 1000)
+    tr.expect("ST-01: 1000 clean → SURFACE_CLEAN", a1.surface_verdict, BioSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("ST-01b: trusted == 1000",            a1.trusted, 1000)
 
     # ST-02: 500 flatline signals → all REJECTED, COMPROMISED
     st2 = [_sig(f"s2_{i}", gsr_variance_us2=0.0) for i in range(500)]
     a2 = audit_bio_surface(st2)
-    check("ST-02: 500 flatline → SURFACE_COMPROMISED",
+    tr.expect("ST-02: 500 flatline → SURFACE_COMPROMISED",
           a2.surface_verdict, BioSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-02b: rejected == 500", a2.rejected, 500)
+    tr.expect("ST-02b: rejected == 500", a2.rejected, 500)
 
     # ST-03: 800 healthy + 200 liveness failure
     st3 = (
@@ -482,27 +476,27 @@ def _run_tests() -> None:
         + [_sig(f"s3b{i}", hrv_rmssd_ms=0.0) for i in range(200)]
     )
     a3 = audit_bio_surface(st3)
-    check("ST-03: 200 liveness failure → COMPROMISED",
+    tr.expect("ST-03: 200 liveness failure → COMPROMISED",
           a3.surface_verdict, BioSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-03b: trusted == 800",  a3.trusted, 800)
-    check("ST-03c: rejected == 200", a3.rejected, 200)
+    tr.expect("ST-03b: trusted == 800",  a3.trusted, 800)
+    tr.expect("ST-03c: rejected == 200", a3.rejected, 200)
 
     # ST-04: EEG sync anomaly flood → all SUSPECT
     st4 = [_sig(f"s4_{i}", eeg_mean_coherence=0.99) for i in range(300)]
     a4 = audit_bio_surface(st4)
-    check("ST-04: 300 EEG sync anomaly → all SUSPECT", a4.suspect, 300)
-    check("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, BioSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("ST-04: 300 EEG sync anomaly → all SUSPECT", a4.suspect, 300)
+    tr.expect("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, BioSurfaceVerdict.SURFACE_DEGRADED)
 
     # ST-05: deception signal mass → all SUSPECT
     st5 = [_sig(f"s5_{i}", elevated_channels=5) for i in range(200)]
     a5 = audit_bio_surface(st5)
-    check("ST-05: 200 deception signals → all SUSPECT", a5.suspect, 200)
-    check("ST-05b: SURFACE_DEGRADED", a5.surface_verdict, BioSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("ST-05: 200 deception signals → all SUSPECT", a5.suspect, 200)
+    tr.expect("ST-05b: SURFACE_DEGRADED", a5.surface_verdict, BioSurfaceVerdict.SURFACE_DEGRADED)
 
     # ST-06: 2 rejected → CONTAMINATED
     st6 = [_sig(f"s6_{i}", gsr_variance_us2=0.0) for i in range(2)]
     a6 = audit_bio_surface(st6)
-    check("ST-06: 2 rejected → CONTAMINATED",
+    tr.expect("ST-06: 2 rejected → CONTAMINATED",
           a6.surface_verdict, BioSurfaceVerdict.SURFACE_CONTAMINATED)
 
     # ST-07: threat_distribution accuracy
@@ -511,26 +505,24 @@ def _run_tests() -> None:
         + [_sig(f"s7b{i}", gsr_variance_us2=0.0) for i in range(100)]
     )
     a7 = audit_bio_surface(st7)
-    check("ST-07: PHYSIOLOGICAL_AUTHENTIC dist == 300",
+    tr.expect("ST-07: PHYSIOLOGICAL_AUTHENTIC dist == 300",
           a7.threat_distribution[BioThreat.PHYSIOLOGICAL_AUTHENTIC.value], 300)
-    check("ST-07b: GSR_FLATLINE dist == 100",
+    tr.expect("ST-07b: GSR_FLATLINE dist == 100",
           a7.threat_distribution[BioThreat.GSR_FLATLINE.value], 100)
 
     # ST-08: high_severity_count threshold
     st8 = [_sig(f"s8_{i}", hrv_rmssd_ms=0.0) for i in range(3)]
     a8 = audit_bio_surface(st8)
-    check("ST-08: high_sev == 3 → COMPROMISED",
+    tr.expect("ST-08: high_sev == 3 → COMPROMISED",
           a8.surface_verdict, BioSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-08b: high_severity_count == 3", a8.high_severity_count, 3)
+    tr.expect("ST-08b: high_severity_count == 3", a8.high_severity_count, 3)
 
     # ST-09: HRV anomaly (not liveness) mass → all SUSPECT
     st9 = [_sig(f"s9_{i}", hrv_rmssd_ms=8.0) for i in range(200)]
     a9 = audit_bio_surface(st9)
-    check("ST-09: 200 HRV anomaly → all SUSPECT", a9.suspect, 200)
+    tr.expect("ST-09: 200 HRV anomaly → all SUSPECT", a9.suspect, 200)
 
-    print(f"\nbio_signal_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 

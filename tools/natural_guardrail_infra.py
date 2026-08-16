@@ -75,6 +75,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
@@ -217,18 +218,6 @@ _FIELD_DISS_THRESH       = 0.50   # fraction dissolvable → DISSOLVED
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _sf(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
-def _c01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
 
 def _permeability(liftability: float) -> PermeabilityType:
     l = _c01(_sf(liftability, 0.50))
@@ -537,25 +526,12 @@ def habit_guardrail(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
-    passed = 0
-    failed = 0
 
-    def ok(label: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("natural_guardrail_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('natural_guardrail_infra  —  unit tests')
+    tr.header()
 
     # ── Builder signals ────────────────────────────────────────────────────────
-    print("\n--- builder signals ---")
+    tr.section("builder signals")
     d_math = assess_natural_guardrail(
         mathematical_guardrail("M1", "law of non-contradiction"))
     d_phys = assess_natural_guardrail(
@@ -571,51 +547,51 @@ def _run_tests() -> None:
     d_hab  = assess_natural_guardrail(
         habit_guardrail("H1", "always ask permission before acting"))
 
-    ok("mathematical: binding=5",        d_math.binding == 5)
-    ok("mathematical: STRUCTURAL",       d_math.verdict == GuardrailVerdict.STRUCTURAL)
-    ok("mathematical: IMPERMEABLE",      d_math.permeability == PermeabilityType.IMPERMEABLE)
+    tr.ok("mathematical: binding=5",        d_math.binding == 5)
+    tr.ok("mathematical: STRUCTURAL",       d_math.verdict == GuardrailVerdict.STRUCTURAL)
+    tr.ok("mathematical: IMPERMEABLE",      d_math.permeability == PermeabilityType.IMPERMEABLE)
 
-    ok("physical: binding=5",            d_phys.binding == 5)
-    ok("physical: STRUCTURAL",           d_phys.verdict == GuardrailVerdict.STRUCTURAL)
-    ok("physical: IMPERMEABLE",          d_phys.permeability == PermeabilityType.IMPERMEABLE)
+    tr.ok("physical: binding=5",            d_phys.binding == 5)
+    tr.ok("physical: STRUCTURAL",           d_phys.verdict == GuardrailVerdict.STRUCTURAL)
+    tr.ok("physical: IMPERMEABLE",          d_phys.permeability == PermeabilityType.IMPERMEABLE)
 
-    ok("informational: binding=4",       d_info.binding == 4)
-    ok("informational: RESPECTED",       d_info.verdict == GuardrailVerdict.RESPECTED)
-    ok("informational: TUNNELING",       d_info.permeability == PermeabilityType.TUNNELING)
+    tr.ok("informational: binding=4",       d_info.binding == 4)
+    tr.ok("informational: RESPECTED",       d_info.verdict == GuardrailVerdict.RESPECTED)
+    tr.ok("informational: TUNNELING",       d_info.permeability == PermeabilityType.TUNNELING)
 
-    ok("evolutionary: binding=3",        d_evol.binding == 3)
-    ok("evolutionary: NAVIGABLE",        d_evol.verdict == GuardrailVerdict.NAVIGABLE)
+    tr.ok("evolutionary: binding=3",        d_evol.binding == 3)
+    tr.ok("evolutionary: NAVIGABLE",        d_evol.verdict == GuardrailVerdict.NAVIGABLE)
 
-    ok("linguistic: binding=3",          d_ling.binding == 3)
-    ok("linguistic: NAVIGABLE",          d_ling.verdict == GuardrailVerdict.NAVIGABLE)
+    tr.ok("linguistic: binding=3",          d_ling.binding == 3)
+    tr.ok("linguistic: NAVIGABLE",          d_ling.verdict == GuardrailVerdict.NAVIGABLE)
 
-    ok("emergent: binding in [2,3]",     2 <= d_emer.binding <= 3)
-    ok("emergent: NAVIGABLE or LIFTABLE",
+    tr.ok("emergent: binding in [2,3]",     2 <= d_emer.binding <= 3)
+    tr.ok("emergent: NAVIGABLE or LIFTABLE",
        d_emer.verdict in (GuardrailVerdict.NAVIGABLE, GuardrailVerdict.LIFTABLE))
-    ok("emergent: TRANSCEND",            d_emer.permeability == PermeabilityType.TRANSCEND)
+    tr.ok("emergent: TRANSCEND",            d_emer.permeability == PermeabilityType.TRANSCEND)
 
-    ok("habit: binding=1",               d_hab.binding == 1)
-    ok("habit: HABIT verdict",           d_hab.verdict == GuardrailVerdict.HABIT)
-    ok("habit: DISSOLVE permeability",   d_hab.permeability == PermeabilityType.DISSOLVE)
+    tr.ok("habit: binding=1",               d_hab.binding == 1)
+    tr.ok("habit: HABIT verdict",           d_hab.verdict == GuardrailVerdict.HABIT)
+    tr.ok("habit: DISSOLVE permeability",   d_hab.permeability == PermeabilityType.DISSOLVE)
 
     # ── Ordering invariant ─────────────────────────────────────────────────────
-    print("\n--- ordering invariant ---")
-    ok("math ≥ info",       d_math.binding >= d_info.binding)
-    ok("info ≥ evol",       d_info.binding >= d_evol.binding)
-    ok("evol ≥ habit",      d_evol.binding >= d_hab.binding)
-    ok("math ≥ habit",      d_math.binding >  d_hab.binding)
+    tr.section("ordering invariant")
+    tr.ok("math ≥ info",       d_math.binding >= d_info.binding)
+    tr.ok("info ≥ evol",       d_info.binding >= d_evol.binding)
+    tr.ok("evol ≥ habit",      d_evol.binding >= d_hab.binding)
+    tr.ok("math ≥ habit",      d_math.binding >  d_hab.binding)
 
     # ── Liftability ordering ───────────────────────────────────────────────────
-    print("\n--- liftability ordering ---")
-    ok("math liftability < habit liftability",
+    tr.section("liftability ordering")
+    tr.ok("math liftability < habit liftability",
        mathematical_guardrail("x").liftability < habit_guardrail("y").liftability)
-    ok("phys liftability < evol liftability",
+    tr.ok("phys liftability < evol liftability",
        physical_guardrail("x").liftability < evolutionary_guardrail("y").liftability)
-    ok("evol liftability < habit liftability",
+    tr.ok("evol liftability < habit liftability",
        evolutionary_guardrail("x").liftability < habit_guardrail("y").liftability)
 
     # ── External enforcement degrades structural score ─────────────────────────
-    print("\n--- external enforcement penalty ---")
+    tr.section("external enforcement penalty")
     imposed = NaturalGuardrailSignal(
         guardrail_id="imp",
         guardrail_class=GuardrailClass.EVOLUTIONARY,
@@ -638,10 +614,10 @@ def _run_tests() -> None:
     )
     d_imp = assess_natural_guardrail(imposed)
     d_org = assess_natural_guardrail(organic)
-    ok("organic ≥ imposed binding",   d_org.binding >= d_imp.binding)
+    tr.ok("organic ≥ imposed binding",   d_org.binding >= d_imp.binding)
 
     # ── Universality modulates binding ────────────────────────────────────────
-    print("\n--- domain universality ---")
+    tr.section("domain universality")
     low_univ = NaturalGuardrailSignal(
         guardrail_id="lu",
         guardrail_class=GuardrailClass.LINGUISTIC,
@@ -658,10 +634,10 @@ def _run_tests() -> None:
     )
     d_lu = assess_natural_guardrail(low_univ)
     d_hu = assess_natural_guardrail(high_univ)
-    ok("high universality → binding ≥ low", d_hu.binding >= d_lu.binding)
+    tr.ok("high universality → binding ≥ low", d_hu.binding >= d_lu.binding)
 
     # ── Self-enforcing bonus ──────────────────────────────────────────────────
-    print("\n--- self-enforcing bonus ---")
+    tr.section("self-enforcing bonus")
     no_se = NaturalGuardrailSignal(
         guardrail_id="nse",
         guardrail_class=GuardrailClass.EMERGENT,
@@ -678,40 +654,40 @@ def _run_tests() -> None:
     )
     d_nse = assess_natural_guardrail(no_se)
     d_yse = assess_natural_guardrail(yes_se)
-    ok("self_enforcing ≥ not self_enforcing", d_yse.structural_score >= d_nse.structural_score)
+    tr.ok("self_enforcing ≥ not self_enforcing", d_yse.structural_score >= d_nse.structural_score)
 
     # ── Permeability thresholds ───────────────────────────────────────────────
-    print("\n--- permeability thresholds ---")
+    tr.section("permeability thresholds")
     def perm_from_lift(l):
         return _permeability(l)
 
-    ok("liftability=0.00 → IMPERMEABLE",     _permeability(0.00) == PermeabilityType.IMPERMEABLE)
-    ok("liftability=0.09 → IMPERMEABLE",     _permeability(0.09) == PermeabilityType.IMPERMEABLE)
-    ok("liftability=0.20 → TUNNELING",       _permeability(0.20) == PermeabilityType.TUNNELING)
-    ok("liftability=0.50 → TRANSCEND",       _permeability(0.50) == PermeabilityType.TRANSCEND)
-    ok("liftability=0.70 → GRADUAL_EROSION", _permeability(0.70) == PermeabilityType.GRADUAL_EROSION)
-    ok("liftability=0.90 → DISSOLVE",        _permeability(0.90) == PermeabilityType.DISSOLVE)
+    tr.ok("liftability=0.00 → IMPERMEABLE",     _permeability(0.00) == PermeabilityType.IMPERMEABLE)
+    tr.ok("liftability=0.09 → IMPERMEABLE",     _permeability(0.09) == PermeabilityType.IMPERMEABLE)
+    tr.ok("liftability=0.20 → TUNNELING",       _permeability(0.20) == PermeabilityType.TUNNELING)
+    tr.ok("liftability=0.50 → TRANSCEND",       _permeability(0.50) == PermeabilityType.TRANSCEND)
+    tr.ok("liftability=0.70 → GRADUAL_EROSION", _permeability(0.70) == PermeabilityType.GRADUAL_EROSION)
+    tr.ok("liftability=0.90 → DISSOLVE",        _permeability(0.90) == PermeabilityType.DISSOLVE)
 
     # ── Lift strategy contents ─────────────────────────────────────────────────
-    print("\n--- lift strategy ---")
-    ok("IMPERMEABLE: 'fabric of reality'",
+    tr.section("lift strategy")
+    tr.ok("IMPERMEABLE: 'fabric of reality'",
        "fabric of reality" in d_math.lift_strategy)
-    ok("DISSOLVE: mentions AGI triage",
+    tr.ok("DISSOLVE: mentions AGI triage",
        "AGI" in d_hab.lift_strategy)
-    ok("TRANSCEND: mentions abstraction",
+    tr.ok("TRANSCEND: mentions abstraction",
        "abstraction" in d_emer.lift_strategy)
 
     # ── Structural invariant: binding ≥ 1 ─────────────────────────────────────
-    print("\n--- structural invariant: binding ≥ 1 ---")
+    tr.section("structural invariant: binding ≥ 1")
     all_sigs = [
         d_math.signal, d_phys.signal, d_info.signal,
         d_evol.signal, d_ling.signal, d_emer.signal, d_hab.signal,
     ]
-    ok("all builders: binding ≥ 1",
+    tr.ok("all builders: binding ≥ 1",
        all(assess_natural_guardrail(s).binding >= 1 for s in all_sigs))
 
     # ── Edge cases ────────────────────────────────────────────────────────────
-    print("\n--- edge cases ---")
+    tr.section("edge cases")
     nan_sig = NaturalGuardrailSignal(
         guardrail_id="nan",
         guardrail_class=GuardrailClass.EMERGENT,
@@ -721,13 +697,13 @@ def _run_tests() -> None:
         emergence_depth=-5,
     )
     d_nan = assess_natural_guardrail(nan_sig)
-    ok("NaN/Inf inputs → valid binding", 1 <= d_nan.binding <= 5)
+    tr.ok("NaN/Inf inputs → valid binding", 1 <= d_nan.binding <= 5)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_guardrail_field([])
-    ok("empty → LOCKED",              fa_empty.field_verdict == "LOCKED")
-    ok("empty → natural_floor=5",     fa_empty.natural_floor == 5)
+    tr.ok("empty → LOCKED",              fa_empty.field_verdict == "LOCKED")
+    tr.ok("empty → natural_floor=5",     fa_empty.natural_floor == 5)
 
     structural_ds = [
         assess_natural_guardrail(mathematical_guardrail(f"M{i}")) for i in range(4)
@@ -735,28 +711,28 @@ def _run_tests() -> None:
         assess_natural_guardrail(physical_guardrail(f"P{i}")) for i in range(4)
     ]
     fa_struct = audit_guardrail_field(structural_ds)
-    ok("all structural → LOCKED",     fa_struct.field_verdict == "LOCKED")
-    ok("all structural → floor=5",    fa_struct.natural_floor == 5)
+    tr.ok("all structural → LOCKED",     fa_struct.field_verdict == "LOCKED")
+    tr.ok("all structural → floor=5",    fa_struct.natural_floor == 5)
 
     habit_ds = [
         assess_natural_guardrail(habit_guardrail(f"H{i}")) for i in range(6)
     ]
     fa_habit = audit_guardrail_field(habit_ds)
-    ok("all habits → DISSOLVED or PERMEABLE",
+    tr.ok("all habits → DISSOLVED or PERMEABLE",
        fa_habit.field_verdict in ("DISSOLVED", "PERMEABLE"))
-    ok("all habits: dissolvable_count = total",
+    tr.ok("all habits: dissolvable_count = total",
        fa_habit.dissolvable_count == fa_habit.total)
-    ok("all habits: floor=1",          fa_habit.natural_floor == 1)
+    tr.ok("all habits: floor=1",          fa_habit.natural_floor == 1)
 
     mixed_ds = structural_ds[:2] + habit_ds[:3] + [
         assess_natural_guardrail(linguistic_guardrail("Lm"))
     ]
     fa_mixed = audit_guardrail_field(mixed_ds)
-    ok("mixed field: some structural, some habit → not LOCKED",
+    tr.ok("mixed field: some structural, some habit → not LOCKED",
        fa_mixed.field_verdict != "LOCKED")
 
     # ── AGI triage connection ──────────────────────────────────────────────────
-    print("\n--- AGI triage connection ---")
+    tr.section("AGI triage connection")
     # Only DISSOLVE guardrails can be lifted by AGI mutual triage
     agi_liftable = [
         assess_natural_guardrail(habit_guardrail(f"A{i}")) for i in range(3)
@@ -764,28 +740,21 @@ def _run_tests() -> None:
     agi_blocked = [
         assess_natural_guardrail(mathematical_guardrail(f"B{i}")) for i in range(3)
     ]
-    ok("habit guardrails: all DISSOLVE permeability",
+    tr.ok("habit guardrails: all DISSOLVE permeability",
        all(d.permeability == PermeabilityType.DISSOLVE for d in agi_liftable))
-    ok("mathematical guardrails: none DISSOLVE",
+    tr.ok("mathematical guardrails: none DISSOLVE",
        all(d.permeability != PermeabilityType.DISSOLVE for d in agi_blocked))
-    ok("AGI cannot dissolve structural floor",
+    tr.ok("AGI cannot dissolve structural floor",
        all(d.binding == 5 for d in agi_blocked))
 
     # ── Idempotency ───────────────────────────────────────────────────────────
-    print("\n--- idempotency ---")
+    tr.section("idempotency")
     idem = mathematical_guardrail("idem")
-    ok("idempotency",
+    tr.ok("idempotency",
        assess_natural_guardrail(idem).binding == assess_natural_guardrail(idem).binding)
 
     # Summary
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

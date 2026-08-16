@@ -38,6 +38,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── drift types ──────────────────────────────────────────────────────────────
@@ -360,20 +361,9 @@ def audit_drift_surface(decisions: Sequence[DriftDecision]) -> DriftAuditSummary
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("pattern_drift_infra.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('pattern_drift_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Stable signal
     print("\n[1] Stable signal")
@@ -382,9 +372,9 @@ def _run_tests() -> bool:
                       current=DistributionalSnapshot(10.1, 1.0, 100),
                       semantic_overlap=0.95)
     d = analyse_drift(sig)
-    ok("stable: no drifts", len(d.drifts_detected) == 0)
-    ok("stable: verdict=STABLE", d.verdict == DriftVerdict.DRIFT_STABLE)
-    ok("stable: binding=4", d.binding_level == 4)
+    tr.ok("stable: no drifts", len(d.drifts_detected) == 0)
+    tr.ok("stable: verdict=STABLE", d.verdict == DriftVerdict.DRIFT_STABLE)
+    tr.ok("stable: binding=4", d.binding_level == 4)
 
     # 2. Distributional drift — mild
     print("\n[2] Distributional drift — mild")
@@ -392,10 +382,10 @@ def _run_tests() -> bool:
                       baseline=DistributionalSnapshot(10.0, 1.0, 100),
                       current=DistributionalSnapshot(11.7, 1.0, 100))
     d = analyse_drift(sig)
-    ok("dist-mild: DISTRIBUTIONAL_DRIFT detected",
+    tr.ok("dist-mild: DISTRIBUTIONAL_DRIFT detected",
        DriftType.DISTRIBUTIONAL_DRIFT in d.drifts_detected)
-    ok("dist-mild: severity=1", d.max_severity == 1)
-    ok("dist-mild: verdict=MONITOR", d.verdict == DriftVerdict.DRIFT_MONITOR)
+    tr.ok("dist-mild: severity=1", d.max_severity == 1)
+    tr.ok("dist-mild: verdict=MONITOR", d.verdict == DriftVerdict.DRIFT_MONITOR)
 
     # 3. Distributional drift — high
     print("\n[3] Distributional drift — high z-score")
@@ -403,70 +393,70 @@ def _run_tests() -> bool:
                       baseline=DistributionalSnapshot(10.0, 1.0, 100),
                       current=DistributionalSnapshot(14.0, 1.0, 100))
     d = analyse_drift(sig)
-    ok("dist-high: detected", DriftType.DISTRIBUTIONAL_DRIFT in d.drifts_detected)
-    ok("dist-high: severity=1", d.max_severity == 1)
-    ok("dist-high: magnitude>0.5", d.drift_magnitude > 0.5)
+    tr.ok("dist-high: detected", DriftType.DISTRIBUTIONAL_DRIFT in d.drifts_detected)
+    tr.ok("dist-high: severity=1", d.max_severity == 1)
+    tr.ok("dist-high: magnitude>0.5", d.drift_magnitude > 0.5)
 
     # 4. Semantic drift — low overlap
     print("\n[4] Semantic drift")
     sig = DriftSignal("sem-001", semantic_overlap=0.4)
     d = analyse_drift(sig)
-    ok("semantic: SEMANTIC_DRIFT detected",
+    tr.ok("semantic: SEMANTIC_DRIFT detected",
        DriftType.SEMANTIC_DRIFT in d.drifts_detected)
-    ok("semantic: severity=2", d.max_severity == 2)
-    ok("semantic: verdict=RECALIBRATE", d.verdict == DriftVerdict.DRIFT_RECALIBRATE)
+    tr.ok("semantic: severity=2", d.max_severity == 2)
+    tr.ok("semantic: verdict=RECALIBRATE", d.verdict == DriftVerdict.DRIFT_RECALIBRATE)
 
     # 5. Semantic drift — mild
     print("\n[5] Semantic drift — mild")
     sig = DriftSignal("sem-002", semantic_overlap=0.7)
     d = analyse_drift(sig)
-    ok("semantic-mild: detected", DriftType.SEMANTIC_DRIFT in d.drifts_detected)
+    tr.ok("semantic-mild: detected", DriftType.SEMANTIC_DRIFT in d.drifts_detected)
 
     # 6. Boundary dissolution
     print("\n[6] Boundary dissolution")
     sig = DriftSignal("bound-001", boundary_fraction=0.40)
     d = analyse_drift(sig)
-    ok("boundary: BOUNDARY_DISSOLUTION detected",
+    tr.ok("boundary: BOUNDARY_DISSOLUTION detected",
        DriftType.BOUNDARY_DISSOLUTION in d.drifts_detected)
-    ok("boundary: severity=3", d.max_severity == 3)
+    tr.ok("boundary: severity=3", d.max_severity == 3)
 
     # 7. Concept creep
     print("\n[7] Concept creep")
     sig = DriftSignal("creep-001", inclusion_expansion_fraction=0.45)
     d = analyse_drift(sig)
-    ok("creep: CONCEPT_CREEP detected",
+    tr.ok("creep: CONCEPT_CREEP detected",
        DriftType.CONCEPT_CREEP in d.drifts_detected)
-    ok("creep: severity=3", d.max_severity == 3)
+    tr.ok("creep: severity=3", d.max_severity == 3)
 
     # 8. Anchor drift
     print("\n[8] Anchor drift")
     sig = DriftSignal("anchor-001", anchor_shift_fraction=0.30)
     d = analyse_drift(sig)
-    ok("anchor: ANCHOR_DRIFT detected",
+    tr.ok("anchor: ANCHOR_DRIFT detected",
        DriftType.ANCHOR_DRIFT in d.drifts_detected)
-    ok("anchor: severity=1", d.max_severity == 1)
+    tr.ok("anchor: severity=1", d.max_severity == 1)
 
     # 9. Structural drift
     print("\n[9] Structural drift")
     sig = DriftSignal("struct-001", structural_change_fraction=0.50)
     d = analyse_drift(sig)
-    ok("struct: STRUCTURAL_DRIFT detected",
+    tr.ok("struct: STRUCTURAL_DRIFT detected",
        DriftType.STRUCTURAL_DRIFT in d.drifts_detected)
-    ok("struct: severity=3", d.max_severity == 3)
+    tr.ok("struct: severity=3", d.max_severity == 3)
 
     # 10. Measurement drift
     print("\n[10] Measurement drift")
     sig = DriftSignal("meas-001", measurement_changed=True)
     d = analyse_drift(sig)
-    ok("meas: MEASUREMENT_DRIFT detected",
+    tr.ok("meas: MEASUREMENT_DRIFT detected",
        DriftType.MEASUREMENT_DRIFT in d.drifts_detected)
-    ok("meas: severity=2", d.max_severity == 2)
+    tr.ok("meas: severity=2", d.max_severity == 2)
 
     # 11. Normative drift
     print("\n[11] Normative drift")
     sig = DriftSignal("norm-001", normative_shift_detected=True)
     d = analyse_drift(sig)
-    ok("norm: NORMATIVE_DRIFT detected",
+    tr.ok("norm: NORMATIVE_DRIFT detected",
        DriftType.NORMATIVE_DRIFT in d.drifts_detected)
 
     # 12. VOID for high-severity + high magnitude
@@ -475,14 +465,14 @@ def _run_tests() -> bool:
                       structural_change_fraction=0.90,
                       boundary_fraction=0.85)
     d = analyse_drift(sig)
-    ok("extreme drift → VOID", d.verdict == DriftVerdict.DRIFT_VOID)
+    tr.ok("extreme drift → VOID", d.verdict == DriftVerdict.DRIFT_VOID)
 
     # 13. Direct drift flags
     print("\n[13] Direct drift flags")
     sig = DriftSignal("direct-001",
                       direct_drift_flags=(DriftType.CONCEPT_CREEP,))
     d = analyse_drift(sig)
-    ok("direct flag: CONCEPT_CREEP present",
+    tr.ok("direct flag: CONCEPT_CREEP present",
        DriftType.CONCEPT_CREEP in d.drifts_detected)
 
     # 14. Multiple drifts
@@ -492,8 +482,8 @@ def _run_tests() -> bool:
                       boundary_fraction=0.45,
                       anchor_shift_fraction=0.30)
     d = analyse_drift(sig)
-    ok("multi: at least 3 drifts", len(d.drifts_detected) >= 3)
-    ok("multi: high severity", d.max_severity >= 2)
+    tr.ok("multi: at least 3 drifts", len(d.drifts_detected) >= 3)
+    tr.ok("multi: high severity", d.max_severity >= 2)
 
     # 15. Surface audit — stable
     print("\n[15] Surface audit — stable")
@@ -502,7 +492,7 @@ def _run_tests() -> bool:
         DriftDecision("s2", (), 0, DriftVerdict.DRIFT_STABLE, 4, 0.0, ""),
     ]
     audit = audit_drift_surface(decisions)
-    ok("stable surface", audit.surface_verdict == DriftSurfaceVerdict.SURFACE_STABLE)
+    tr.ok("stable surface", audit.surface_verdict == DriftSurfaceVerdict.SURFACE_STABLE)
 
     # 16. Surface audit — compromised
     print("\n[16] Surface audit — compromised")
@@ -511,7 +501,7 @@ def _run_tests() -> bool:
                       DriftVerdict.DRIFT_VOID, 1, 0.9, ""),
     ]
     audit = audit_drift_surface(decisions)
-    ok("void → COMPROMISED",
+    tr.ok("void → COMPROMISED",
        audit.surface_verdict == DriftSurfaceVerdict.SURFACE_COMPROMISED)
 
     # 17. Dominant drift type
@@ -522,16 +512,10 @@ def _run_tests() -> bool:
         DriftDecision("s3", (DriftType.ANCHOR_DRIFT,), 1, DriftVerdict.DRIFT_MONITOR, 3, 0.3, ""),
     ]
     audit = audit_drift_surface(decisions)
-    ok("dominant=SEMANTIC_DRIFT", audit.dominant_drift_type == DriftType.SEMANTIC_DRIFT)
-    ok("mean_drift_magnitude>0", audit.mean_drift_magnitude > 0)
+    tr.ok("dominant=SEMANTIC_DRIFT", audit.dominant_drift_type == DriftType.SEMANTIC_DRIFT)
+    tr.ok("mean_drift_magnitude>0", audit.mean_drift_magnitude > 0)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

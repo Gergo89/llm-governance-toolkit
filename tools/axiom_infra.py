@@ -47,6 +47,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -217,18 +218,6 @@ _FIELD_ANCHOR_THRESH     = 0.50  # anchor rate → STEEL
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _safe_float(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
-def _clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
-
 def _clamp_binding(x: float) -> int:
     if not math.isfinite(x):
         return 1
@@ -236,7 +225,7 @@ def _clamp_binding(x: float) -> int:
 
 
 def _babel_level(common_denominator: float) -> BabelConflictLevel:
-    cd = _clamp01(common_denominator)
+    cd = _c01(common_denominator)
     for threshold, level in _BABEL_THRESHOLDS:
         if cd >= threshold:
             return level
@@ -272,14 +261,14 @@ def evaluate_axiom(signal: AxiomSignal) -> AxiomDecision:
     """
     notes: list[str] = []
 
-    conf      = _clamp01(_safe_float(signal.confidence, 0.80))
-    resist    = _clamp01(_safe_float(signal.resistance, 0.50))
-    entropy   = _clamp01(_safe_float(signal.entropy_level, 0.10))
-    cd        = _clamp01(_safe_float(signal.common_denominator, 1.0))
+    conf      = _c01(_sf(signal.confidence, 0.80))
+    resist    = _c01(_sf(signal.resistance, 0.50))
+    entropy   = _c01(_sf(signal.entropy_level, 0.10))
+    cd        = _c01(_sf(signal.common_denominator, 1.0))
     n_conflicts = max(0, len(signal.cross_domain_conflicts or []))
     depth     = max(0, int(signal.derivation_depth) if
                    isinstance(signal.derivation_depth, int) else 0)
-    cons_rate = _clamp01(_safe_float(signal.consensus_rate, 1.0))
+    cons_rate = _c01(_sf(signal.consensus_rate, 1.0))
     cls       = signal.axiom_class
     status    = signal.axiom_status
 
@@ -608,153 +597,140 @@ def paradoxical_axiom(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
 
-    passed = 0
-    failed = 0
 
-    def ok(label: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("axiom_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('axiom_infra  —  unit tests')
+    tr.header()
 
     # ── Foundational axiom ───────────────────────────────────────────────────
-    print("\n--- foundational axiom ---")
+    tr.section("foundational axiom")
     fa = foundational_axiom("F1", "logic", "A = A (identity)")
     d_fa = evaluate_axiom(fa)
-    ok("foundational: binding = 5",        d_fa.binding == 5)
-    ok("foundational: verdict = ANCHOR",   d_fa.verdict == AxiomVerdict.ANCHOR)
-    ok("foundational: babel = UNIFIED",    d_fa.babel_level == BabelConflictLevel.UNIFIED)
-    ok("foundational: high inertia",       d_fa.inertia_score >= 0.85)
+    tr.ok("foundational: binding = 5",        d_fa.binding == 5)
+    tr.ok("foundational: verdict = ANCHOR",   d_fa.verdict == AxiomVerdict.ANCHOR)
+    tr.ok("foundational: babel = UNIFIED",    d_fa.babel_level == BabelConflictLevel.UNIFIED)
+    tr.ok("foundational: high inertia",       d_fa.inertia_score >= 0.85)
 
     # ── Derived axiom ────────────────────────────────────────────────────────
-    print("\n--- derived axiom ---")
+    tr.section("derived axiom")
     da = derived_axiom("D1", "math", "A ∨ ¬A (excluded middle)", parent_axiom_ids=["F1"])
     d_da = evaluate_axiom(da)
-    ok("derived: binding ≥ 3",             d_da.binding >= 3)
-    ok("derived: verdict ANCHOR or AFFIRM",
+    tr.ok("derived: binding ≥ 3",             d_da.binding >= 3)
+    tr.ok("derived: verdict ANCHOR or AFFIRM",
        d_da.verdict in (AxiomVerdict.ANCHOR, AxiomVerdict.AFFIRM))
 
     da_deep = derived_axiom("D2", "math", "deep derived", derivation_depth=5)
     d_deep = evaluate_axiom(da_deep)
-    ok("deep derived: binding ≤ derived binding", d_deep.binding <= d_da.binding)
+    tr.ok("deep derived: binding ≤ derived binding", d_deep.binding <= d_da.binding)
 
     # ── Empirical axiom ──────────────────────────────────────────────────────
-    print("\n--- empirical axiom ---")
+    tr.section("empirical axiom")
     ea = empirical_axiom("E1", "physics", "c ≈ 3×10⁸ m/s", confidence=0.99)
     d_ea = evaluate_axiom(ea)
-    ok("empirical: binding ≤ 3",           d_ea.binding <= 3)
-    ok("empirical: verdict not ANCHOR",    d_ea.verdict != AxiomVerdict.ANCHOR)
+    tr.ok("empirical: binding ≤ 3",           d_ea.binding <= 3)
+    tr.ok("empirical: verdict not ANCHOR",    d_ea.verdict != AxiomVerdict.ANCHOR)
 
     ea_low = empirical_axiom("E2", "sociology", "people act rationally",
                              confidence=0.30, entropy_level=0.60)
     d_ea_low = evaluate_axiom(ea_low)
-    ok("empirical low conf: binding ≤ 2",  d_ea_low.binding <= 2)
+    tr.ok("empirical low conf: binding ≤ 2",  d_ea_low.binding <= 2)
 
     # ── Consensus axiom ──────────────────────────────────────────────────────
-    print("\n--- consensus axiom ---")
+    tr.section("consensus axiom")
     ca = consensus_axiom("C1", "ethics", "do not harm", consensus_rate=0.90)
     d_ca = evaluate_axiom(ca)
-    ok("consensus high rate: binding ≥ 3", d_ca.binding >= 3)
+    tr.ok("consensus high rate: binding ≥ 3", d_ca.binding >= 3)
 
     ca_low = consensus_axiom("C2", "politics", "taxation is just",
                              consensus_rate=0.30)
     d_ca_low = evaluate_axiom(ca_low)
-    ok("consensus low rate: binding < high rate binding",
+    tr.ok("consensus low rate: binding < high rate binding",
        d_ca_low.binding <= d_ca.binding)
 
     # ── Domain axiom ─────────────────────────────────────────────────────────
-    print("\n--- domain axiom ---")
+    tr.section("domain axiom")
     doa = domain_axiom("DO1", "medicine", "primum non nocere",
                        cross_domain_conflicts=["law_axiom_1"])
     d_doa = evaluate_axiom(doa)
-    ok("domain + 1 conflict: binding ≤ 3", d_doa.binding <= 3)
+    tr.ok("domain + 1 conflict: binding ≤ 3", d_doa.binding <= 3)
 
     doa_clean = domain_axiom("DO2", "engineering", "measure twice, cut once")
     d_doa_clean = evaluate_axiom(doa_clean)
-    ok("domain no conflict: binding ≥ domain with conflict",
+    tr.ok("domain no conflict: binding ≥ domain with conflict",
        d_doa_clean.binding >= d_doa.binding)
 
     # ── Paradoxical axiom ────────────────────────────────────────────────────
-    print("\n--- paradoxical axiom ---")
+    tr.section("paradoxical axiom")
     pa = paradoxical_axiom("P1", "logic", "This statement is false.")
     d_pa = evaluate_axiom(pa)
-    ok("paradoxical: binding = 1",         d_pa.binding == 1)
-    ok("paradoxical: verdict = VOID",      d_pa.verdict == AxiomVerdict.VOID)
+    tr.ok("paradoxical: binding = 1",         d_pa.binding == 1)
+    tr.ok("paradoxical: verdict = VOID",      d_pa.verdict == AxiomVerdict.VOID)
 
     # ── Status modifiers ─────────────────────────────────────────────────────
-    print("\n--- status modifiers ---")
+    tr.section("status modifiers")
     sig_dep = foundational_axiom("F_dep", "logic", "deprecated identity")
     sig_dep = AxiomSignal(**{**sig_dep.__dict__, "axiom_status": AxiomStatus.DEPRECATED})
     d_dep = evaluate_axiom(sig_dep)
-    ok("deprecated → QUARANTINE",          d_dep.verdict == AxiomVerdict.QUARANTINE)
-    ok("deprecated → binding = 1",         d_dep.binding == 1)
+    tr.ok("deprecated → QUARANTINE",          d_dep.verdict == AxiomVerdict.QUARANTINE)
+    tr.ok("deprecated → binding = 1",         d_dep.binding == 1)
 
     sig_con = foundational_axiom("F_con", "logic", "contested")
     sig_con = AxiomSignal(**{**sig_con.__dict__, "axiom_status": AxiomStatus.CONTESTED})
     d_con = evaluate_axiom(sig_con)
-    ok("contested foundational → QUARANTINE or VOID",
+    tr.ok("contested foundational → QUARANTINE or VOID",
        d_con.verdict in (AxiomVerdict.QUARANTINE, AxiomVerdict.VOID))
 
     sig_und = foundational_axiom("F_und", "logic", "undecidable")
     sig_und = AxiomSignal(**{**sig_und.__dict__,
                               "axiom_status": AxiomStatus.UNDECIDABLE})
     d_und = evaluate_axiom(sig_und)
-    ok("undecidable → binding ≤ 3",        d_und.binding <= 3)
+    tr.ok("undecidable → binding ≤ 3",        d_und.binding <= 3)
 
     # ── Babel conflict ────────────────────────────────────────────────────────
-    print("\n--- babel conflict (Tower of Babel) ---")
+    tr.section("babel conflict (Tower of Babel)")
     sig_frag = foundational_axiom("F_babel", "theology",
                                   "god is one", common_denominator=0.10)
     d_frag = evaluate_axiom(sig_frag)
-    ok("cd=0.10 → FRAGMENTED",
+    tr.ok("cd=0.10 → FRAGMENTED",
        d_frag.babel_level in (BabelConflictLevel.FRAGMENTED,
                                BabelConflictLevel.COLLAPSED))
-    ok("fragmented → QUARANTINE or VOID",
+    tr.ok("fragmented → QUARANTINE or VOID",
        d_frag.verdict in (AxiomVerdict.QUARANTINE, AxiomVerdict.VOID))
 
     sig_unified = foundational_axiom("F_unified", "math",
                                      "1 + 1 = 2", common_denominator=0.99)
     d_uni = evaluate_axiom(sig_unified)
-    ok("cd=0.99 → UNIFIED",                d_uni.babel_level == BabelConflictLevel.UNIFIED)
-    ok("unified foundational → ANCHOR",    d_uni.verdict == AxiomVerdict.ANCHOR)
+    tr.ok("cd=0.99 → UNIFIED",                d_uni.babel_level == BabelConflictLevel.UNIFIED)
+    tr.ok("unified foundational → ANCHOR",    d_uni.verdict == AxiomVerdict.ANCHOR)
 
     # ── Entropy ───────────────────────────────────────────────────────────────
-    print("\n--- entropy ---")
+    tr.section("entropy")
     sig_low_ent = foundational_axiom("F_ent_lo", "logic", "low entropy")
     sig_lo = AxiomSignal(**{**sig_low_ent.__dict__, "entropy_level": 0.05})
     sig_hi = AxiomSignal(**{**sig_low_ent.__dict__, "entropy_level": 0.80})
     d_lo = evaluate_axiom(sig_lo)
     d_hi = evaluate_axiom(sig_hi)
-    ok("high entropy → lower binding",     d_hi.binding <= d_lo.binding)
-    ok("high entropy → higher entropy_penalty",
+    tr.ok("high entropy → lower binding",     d_hi.binding <= d_lo.binding)
+    tr.ok("high entropy → higher entropy_penalty",
        d_hi.entropy_penalty > d_lo.entropy_penalty)
 
     # ── Inertia score ─────────────────────────────────────────────────────────
-    print("\n--- inertia score ---")
+    tr.section("inertia score")
     sig_steel = foundational_axiom("F_steel", "math", "acél a cél")
     d_steel = evaluate_axiom(sig_steel)
-    ok("steel axiom: inertia ≥ 0.85",      d_steel.inertia_score >= 0.85)
+    tr.ok("steel axiom: inertia ≥ 0.85",      d_steel.inertia_score >= 0.85)
 
     sig_soft = empirical_axiom("E_soft", "social", "soft axiom",
                                confidence=0.50, entropy_level=0.50)
     d_soft = evaluate_axiom(sig_soft)
-    ok("soft axiom: inertia < steel inertia",
+    tr.ok("soft axiom: inertia < steel inertia",
        d_soft.inertia_score < d_steel.inertia_score)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_axiom_field([])
-    ok("empty field → STEEL",              fa_empty.field_verdict == "STEEL")
-    ok("empty field → binding 5.0",        fa_empty.mean_binding  == 5.0)
+    tr.ok("empty field → STEEL",              fa_empty.field_verdict == "STEEL")
+    tr.ok("empty field → binding 5.0",        fa_empty.mean_binding  == 5.0)
 
     # Steel field: all foundational
     steel_decisions = [
@@ -762,8 +738,8 @@ def _run_tests() -> None:
         for i in range(6)
     ]
     fa_steel = audit_axiom_field(steel_decisions)
-    ok("all foundational → STEEL",         fa_steel.field_verdict == "STEEL")
-    ok("all foundational → anchor_count=6",fa_steel.anchor_count == 6)
+    tr.ok("all foundational → STEEL",         fa_steel.field_verdict == "STEEL")
+    tr.ok("all foundational → anchor_count=6",fa_steel.anchor_count == 6)
 
     # Contested field: inject voids
     void_decisions = [
@@ -775,15 +751,15 @@ def _run_tests() -> None:
         for i in range(4)
     ]
     fa_void = audit_axiom_field(void_decisions)
-    ok("many voids → COLLAPSED",           fa_void.field_verdict == "COLLAPSED")
-    ok("void field → void_count ≥ 4",      fa_void.void_count >= 4)
+    tr.ok("many voids → COLLAPSED",           fa_void.field_verdict == "COLLAPSED")
+    tr.ok("void field → void_count ≥ 4",      fa_void.void_count >= 4)
 
     # ── Sentinel & edge cases ─────────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     nan_sig = empirical_axiom("E_nan", "test", "nan test", confidence=float("nan"))
     d_nan = evaluate_axiom(nan_sig)
-    ok("NaN confidence → valid binding",   1 <= d_nan.binding <= 5)
+    tr.ok("NaN confidence → valid binding",   1 <= d_nan.binding <= 5)
 
     inf_sig = AxiomSignal(
         axiom_id="inf_resist", axiom_class=AxiomClass.FOUNDATIONAL,
@@ -791,7 +767,7 @@ def _run_tests() -> None:
         resistance=float("inf"), entropy_level=float("nan"),
     )
     d_inf = evaluate_axiom(inf_sig)
-    ok("Inf resistance / NaN entropy → valid", 1 <= d_inf.binding <= 5)
+    tr.ok("Inf resistance / NaN entropy → valid", 1 <= d_inf.binding <= 5)
 
     neg_sig = AxiomSignal(
         axiom_id="neg_depth", axiom_class=AxiomClass.DERIVED,
@@ -799,16 +775,16 @@ def _run_tests() -> None:
         derivation_depth=-5,
     )
     d_neg = evaluate_axiom(neg_sig)
-    ok("negative derivation_depth → clamped, valid", 1 <= d_neg.binding <= 5)
+    tr.ok("negative derivation_depth → clamped, valid", 1 <= d_neg.binding <= 5)
 
     # Idempotency
     sig_idem = foundational_axiom("F_idem", "math", "idempotency test")
     d1 = evaluate_axiom(sig_idem)
     d2 = evaluate_axiom(sig_idem)
-    ok("idempotency: same signal → same binding", d1.binding == d2.binding)
+    tr.ok("idempotency: same signal → same binding", d1.binding == d2.binding)
 
     # ── Az igazság utat tör magának ───────────────────────────────────────────
-    print("\n--- truth-path invariant (az igazság utat tör magának) ---")
+    tr.section("truth-path invariant (az igazság utat tör magának)")
     # High-inertia FOUNDATIONAL axiom must always outbind low-inertia EMPIRICAL
     truth = foundational_axiom("truth", "epistemology",
                                 "truth makes its own way")
@@ -816,18 +792,11 @@ def _run_tests() -> None:
                              "noise claim", confidence=0.20, entropy_level=0.80)
     d_truth = evaluate_axiom(truth)
     d_noise = evaluate_axiom(noise)
-    ok("truth binding > noise binding",    d_truth.binding > d_noise.binding)
-    ok("truth → ANCHOR",                   d_truth.verdict == AxiomVerdict.ANCHOR)
+    tr.ok("truth binding > noise binding",    d_truth.binding > d_noise.binding)
+    tr.ok("truth → ANCHOR",                   d_truth.verdict == AxiomVerdict.ANCHOR)
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

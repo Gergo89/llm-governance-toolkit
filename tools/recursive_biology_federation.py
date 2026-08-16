@@ -34,6 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ─── biological scale ─────────────────────────────────────────────────────────
@@ -346,42 +347,31 @@ def build_organism_federation(federation_id: str) -> RecursiveBiologyFederation:
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("recursive_biology_federation.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('recursive_biology_federation.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Binding from scale and state
     print("\n[1] Binding from scale and homeostasis")
     n = BioNode("n1", BioScale.ORGANISM)
-    ok("organism stable base=4", n.binding_level == 4)
+    tr.ok("organism stable base=4", n.binding_level == 4)
     n.homeostasis = HomeostasisState.DISRUPTED
-    ok("organism disrupted base=max(1,4-2)=2", n.binding_level == 2)
+    tr.ok("organism disrupted base=max(1,4-2)=2", n.binding_level == 2)
     n.homeostasis = HomeostasisState.FAILED
-    ok("failed → binding=1", n.binding_level == 1)
+    tr.ok("failed → binding=1", n.binding_level == 1)
 
     # 2. Empirical measurement boost
     print("\n[2] Empirical measurement boost")
     n = BioNode("n2", BioScale.ORGANISM)
     n.coherence_score = 0.9
     n.is_empirically_measured = True
-    ok("organism+measured+highcoh → 5", n.binding_level == 5)
+    tr.ok("organism+measured+highcoh → 5", n.binding_level == 5)
 
     # 3. Coherence penalty
     print("\n[3] Low coherence penalty")
     n = BioNode("n3", BioScale.ECOSYSTEM)
     n.coherence_score = 0.3
-    ok("ecosystem+low_coh → max(1,4-1)=3", n.binding_level == 3)
+    tr.ok("ecosystem+low_coh → max(1,4-1)=3", n.binding_level == 3)
 
     # 4. Coherence verdict
     print("\n[4] Coherence verdicts")
@@ -389,50 +379,50 @@ def _run_tests() -> bool:
     child = BioNode("c", BioScale.CELLULAR)
     n.add_constituent(child)
     n.coherence_score = 0.9
-    ok("0.9 → COHERENT", n.coherence_verdict == BioCoherenceVerdict.COHERENT)
+    tr.ok("0.9 → COHERENT", n.coherence_verdict == BioCoherenceVerdict.COHERENT)
     n.coherence_score = 0.5
-    ok("0.5 → PARTIAL", n.coherence_verdict == BioCoherenceVerdict.PARTIAL)
+    tr.ok("0.5 → PARTIAL", n.coherence_verdict == BioCoherenceVerdict.PARTIAL)
     n.coherence_score = 0.3
-    ok("0.3 → INCOHERENT", n.coherence_verdict == BioCoherenceVerdict.INCOHERENT)
+    tr.ok("0.3 → INCOHERENT", n.coherence_verdict == BioCoherenceVerdict.INCOHERENT)
     n.coherence_score = 0.1
-    ok("0.1 → COLLAPSED", n.coherence_verdict == BioCoherenceVerdict.COLLAPSED)
+    tr.ok("0.1 → COLLAPSED", n.coherence_verdict == BioCoherenceVerdict.COLLAPSED)
 
     # 5. Leaf node always COHERENT
     print("\n[5] Leaf coherence")
     leaf = BioNode("leaf", BioScale.MOLECULAR)
     leaf.coherence_score = 0.01
-    ok("leaf always COHERENT (no children)", leaf.coherence_verdict == BioCoherenceVerdict.COHERENT)
+    tr.ok("leaf always COHERENT (no children)", leaf.coherence_verdict == BioCoherenceVerdict.COHERENT)
 
     # 6. Verdict rules
     print("\n[6] Verdict rules")
     n = BioNode("v1", BioScale.ORGANISM)
     n.homeostasis = HomeostasisState.FAILED
     n.n_observations = 10
-    ok("FAILED → VOID", n.verdict == BioVerdict.BIO_VOID)
+    tr.ok("FAILED → VOID", n.verdict == BioVerdict.BIO_VOID)
 
     n2 = BioNode("v2", BioScale.ORGANISM)
     n2.coherence_score = 0.05
     n2.add_constituent(BioNode("x", BioScale.ORGAN))
     n2.n_observations = 10
-    ok("COLLAPSED → VOID", n2.verdict == BioVerdict.BIO_VOID)
+    tr.ok("COLLAPSED → VOID", n2.verdict == BioVerdict.BIO_VOID)
 
     n3 = BioNode("v3", BioScale.ORGANISM)
     n3.n_observations = 0
-    ok("no obs → GATHER", n3.verdict == BioVerdict.BIO_GATHER)
+    tr.ok("no obs → GATHER", n3.verdict == BioVerdict.BIO_GATHER)
 
     n4 = BioNode("v4", BioScale.ORGANISM)
     n4.coherence_score = 0.9
     n4.is_empirically_measured = True
     n4.n_observations = 10
-    ok("measured+high → AFFIRM", n4.verdict == BioVerdict.BIO_AFFIRM)
+    tr.ok("measured+high → AFFIRM", n4.verdict == BioVerdict.BIO_AFFIRM)
 
     # 7. Observe convergence
     print("\n[7] Observe convergence")
     n = BioNode("obs", BioScale.CELLULAR)
     for _ in range(20):
         n.observe(0.9)
-    ok("20 high obs → coherence>=0.7", n.coherence_score >= 0.7)
-    ok("n_observations=20", n.n_observations == 20)
+    tr.ok("20 high obs → coherence>=0.7", n.coherence_score >= 0.7)
+    tr.ok("n_observations=20", n.n_observations == 20)
 
     # 8. Observe decline
     n = BioNode("obs2", BioScale.CELLULAR)
@@ -440,22 +430,22 @@ def _run_tests() -> bool:
     n.n_observations = 5
     for _ in range(30):
         n.observe(0.1)
-    ok("30 low obs → coherence declines", n.coherence_score < 0.5)
+    tr.ok("30 low obs → coherence declines", n.coherence_score < 0.5)
 
     # 9. build_organism_federation
     print("\n[9] Organism federation builder")
     fed = build_organism_federation("org-001")
     a = fed.audit()
-    ok("6 nodes", a.total_nodes == 6)
-    ok("depth=5", a.max_depth == 5)
-    ok("MOLECULAR present", "MOLECULAR" in a.scales_present)
-    ok("ECOSYSTEM present", "ECOSYSTEM" in a.scales_present)
+    tr.ok("6 nodes", a.total_nodes == 6)
+    tr.ok("depth=5", a.max_depth == 5)
+    tr.ok("MOLECULAR present", "MOLECULAR" in a.scales_present)
+    tr.ok("ECOSYSTEM present", "ECOSYSTEM" in a.scales_present)
 
     # 10. All gather (no observations)
     print("\n[10] All gather with no observations")
     fed = build_organism_federation("gather-001")
     a = fed.audit()
-    ok("all gather", a.gather_count == a.total_nodes)
+    tr.ok("all gather", a.gather_count == a.total_nodes)
 
     # 11. All affirm with high observations
     print("\n[11] All affirm with high observations")
@@ -465,9 +455,9 @@ def _run_tests() -> bool:
         for _ in range(10):
             node.observe(0.95)
     a = fed.audit()
-    ok("affirm>0", a.affirm_count > 0)
-    ok("void=0", a.void_count == 0)
-    ok("verdict=AFFIRM", a.verdict == BioVerdict.BIO_AFFIRM)
+    tr.ok("affirm>0", a.affirm_count > 0)
+    tr.ok("void=0", a.void_count == 0)
+    tr.ok("verdict=AFFIRM", a.verdict == BioVerdict.BIO_AFFIRM)
 
     # 12. Failed homeostasis propagates
     print("\n[12] FAILED homeostasis propagates to VOID")
@@ -479,9 +469,9 @@ def _run_tests() -> bool:
     mol = fed.get_node("molecule-atp")
     mol.homeostasis = HomeostasisState.FAILED
     a = fed.audit()
-    ok("failed_homeostasis_count>=1", a.failed_homeostasis_count >= 1)
-    ok("void_count>=1", a.void_count >= 1)
-    ok("verdict VOID", a.verdict == BioVerdict.BIO_VOID)
+    tr.ok("failed_homeostasis_count>=1", a.failed_homeostasis_count >= 1)
+    tr.ok("void_count>=1", a.void_count >= 1)
+    tr.ok("verdict VOID", a.verdict == BioVerdict.BIO_VOID)
 
     # 13. add_constituent deduplication
     print("\n[13] Deduplication")
@@ -489,7 +479,7 @@ def _run_tests() -> bool:
     c = BioNode("child-u", BioScale.CELLULAR)
     n.add_constituent(c)
     n.add_constituent(c)
-    ok("no duplicate children", len(n.constituent_entities) == 1)
+    tr.ok("no duplicate children", len(n.constituent_entities) == 1)
 
     # 14. Snapshot
     print("\n[14] Snapshot")
@@ -498,23 +488,17 @@ def _run_tests() -> bool:
     n.is_empirically_measured = True
     n.n_observations = 5
     s = snap_bio(n)
-    ok("snap: scale=ORGAN", s.scale == BioScale.ORGAN)
-    ok("snap: is_measured=True", s.is_empirically_measured)
-    ok("snap: n_constituents=0", s.n_constituents == 0)
+    tr.ok("snap: scale=ORGAN", s.scale == BioScale.ORGAN)
+    tr.ok("snap: is_measured=True", s.is_empirically_measured)
+    tr.ok("snap: n_constituents=0", s.n_constituents == 0)
 
     # 15. Summary text
     print("\n[15] Summary sanity")
     fed = build_organism_federation("summary-001")
     a = fed.audit()
-    ok("summary non-empty", len(a.summary) > 20)
+    tr.ok("summary non-empty", len(a.summary) > 20)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

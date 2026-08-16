@@ -38,6 +38,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -368,48 +369,41 @@ def _sig(sid: str, **kw) -> GazeSignal:
 
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('eye_movement_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # ── Group A: clean / trusted ──────────────────────────────────────────────
     d = evaluate_gaze(_sig("A01", hardware_calibrated=True, anti_spoof_passed=True))
-    check("UT-A01: hw+anti-spoof → TRUSTED",   d.verdict, GazeVerdict.TRUSTED)
-    check("UT-A01b: binding == 5",              d.binding_level, 5)
-    check("UT-A01c: AFFIRM",                    d.governance_action, "AFFIRM")
-    check("UT-A01d: AUTHENTIC in threats",      GazeThreat.AUTHENTIC in d.threats, True)
+    tr.expect("UT-A01: hw+anti-spoof → TRUSTED",   d.verdict, GazeVerdict.TRUSTED)
+    tr.expect("UT-A01b: binding == 5",              d.binding_level, 5)
+    tr.expect("UT-A01c: AFFIRM",                    d.governance_action, "AFFIRM")
+    tr.expect("UT-A01d: AUTHENTIC in threats",      GazeThreat.AUTHENTIC in d.threats, True)
 
     d = evaluate_gaze(_sig("A02", hardware_calibrated=True))
-    check("UT-A02: hw only → TRUSTED, bind=4", d.verdict, GazeVerdict.TRUSTED)
-    check("UT-A02b: binding == 4",              d.binding_level, 4)
+    tr.expect("UT-A02: hw only → TRUSTED, bind=4", d.verdict, GazeVerdict.TRUSTED)
+    tr.expect("UT-A02b: binding == 4",              d.binding_level, 4)
 
     d = evaluate_gaze(_sig("A03"))
-    check("UT-A03: no hw → PROVISIONAL, bind=3", d.verdict, GazeVerdict.PROVISIONAL)
-    check("UT-A03b: binding == 3",               d.binding_level, 3)
+    tr.expect("UT-A03: no hw → PROVISIONAL, bind=3", d.verdict, GazeVerdict.PROVISIONAL)
+    tr.expect("UT-A03b: binding == 3",               d.binding_level, 3)
 
     # ── Group B: gaze spoofing ────────────────────────────────────────────────
     d = evaluate_gaze(_sig("B01", gaze_pupil_consistent=False))
-    check("UT-B01: pupil inconsistency → GAZE_SPOOFED",
+    tr.expect("UT-B01: pupil inconsistency → GAZE_SPOOFED",
           GazeThreat.GAZE_SPOOFED in d.threats, True)
-    check("UT-B01b: REJECTED", d.verdict, GazeVerdict.REJECTED)
-    check("UT-B01c: VOID",     d.governance_action, "VOID")
+    tr.expect("UT-B01b: REJECTED", d.verdict, GazeVerdict.REJECTED)
+    tr.expect("UT-B01c: VOID",     d.governance_action, "VOID")
 
     # ── Group C: fixation anomaly ─────────────────────────────────────────────
     bad_fixations = tuple(Fixation(x_deg=0.0, y_deg=0.0, duration_ms=5.0) for _ in range(10))
     d = evaluate_gaze(_sig("C01", fixations=bad_fixations))
-    check("UT-C01: all fixations < 80ms → FIXATION_ANOMALY",
+    tr.expect("UT-C01: all fixations < 80ms → FIXATION_ANOMALY",
           GazeThreat.FIXATION_ANOMALY in d.threats, True)
-    check("UT-C01b: REJECTED", d.verdict, GazeVerdict.REJECTED)
+    tr.expect("UT-C01b: REJECTED", d.verdict, GazeVerdict.REJECTED)
 
     long_fixations = tuple(Fixation(x_deg=0.0, y_deg=0.0, duration_ms=5000.0) for _ in range(10))
     d = evaluate_gaze(_sig("C02", fixations=long_fixations))
-    check("UT-C02: all fixations > 1200ms → FIXATION_ANOMALY",
+    tr.expect("UT-C02: all fixations > 1200ms → FIXATION_ANOMALY",
           GazeThreat.FIXATION_ANOMALY in d.threats, True)
 
     # ── Group D: saccade kinematics ───────────────────────────────────────────
@@ -418,79 +412,79 @@ def _run_tests() -> None:
         for _ in range(10)
     )
     d = evaluate_gaze(_sig("D01", saccades=bad_saccades))
-    check("UT-D01: off-main-sequence saccades → SACCADE_KINEMATICS_FAIL",
+    tr.expect("UT-D01: off-main-sequence saccades → SACCADE_KINEMATICS_FAIL",
           GazeThreat.SACCADE_KINEMATICS_FAIL in d.threats, True)
-    check("UT-D01b: REJECTED", d.verdict, GazeVerdict.REJECTED)
+    tr.expect("UT-D01b: REJECTED", d.verdict, GazeVerdict.REJECTED)
 
     d2 = evaluate_gaze(_sig("D02", saccades=_human_saccades()))
-    check("UT-D02: on-main-sequence → no KINEMATICS_FAIL",
+    tr.expect("UT-D02: on-main-sequence → no KINEMATICS_FAIL",
           GazeThreat.SACCADE_KINEMATICS_FAIL in d2.threats, False)
-    check("UT-D02b: pass_rate >= 0.6", d2.main_seq_pass_rate >= 0.6, True)
+    tr.expect("UT-D02b: pass_rate >= 0.6", d2.main_seq_pass_rate >= 0.6, True)
 
     # ── Group E: blink rate ───────────────────────────────────────────────────
     d = evaluate_gaze(_sig("E01", blinks_per_minute=2.0))
-    check("UT-E01: blink < 8/min → BLINK_RATE_ANOMALY",
+    tr.expect("UT-E01: blink < 8/min → BLINK_RATE_ANOMALY",
           GazeThreat.BLINK_RATE_ANOMALY in d.threats, True)
-    check("UT-E01b: SUSPECT", d.verdict, GazeVerdict.SUSPECT)
+    tr.expect("UT-E01b: SUSPECT", d.verdict, GazeVerdict.SUSPECT)
 
     d = evaluate_gaze(_sig("E02", blinks_per_minute=60.0))
-    check("UT-E02: blink > 30/min → BLINK_RATE_ANOMALY",
+    tr.expect("UT-E02: blink > 30/min → BLINK_RATE_ANOMALY",
           GazeThreat.BLINK_RATE_ANOMALY in d.threats, True)
 
     d = evaluate_gaze(_sig("E03", blinks_per_minute=15.0))
-    check("UT-E03: blink=15/min → no anomaly",
+    tr.expect("UT-E03: blink=15/min → no anomaly",
           GazeThreat.BLINK_RATE_ANOMALY in d.threats, False)
 
     # ── Group F: reading anomaly ──────────────────────────────────────────────
     d = evaluate_gaze(_sig("F01", regression_rate=0.45))
-    check("UT-F01: high regression → READING_SKIP_ANOMALY",
+    tr.expect("UT-F01: high regression → READING_SKIP_ANOMALY",
           GazeThreat.READING_SKIP_ANOMALY in d.threats, True)
 
     d = evaluate_gaze(_sig("F02", word_skip_rate=0.60))
-    check("UT-F02: high skip → READING_SKIP_ANOMALY",
+    tr.expect("UT-F02: high skip → READING_SKIP_ANOMALY",
           GazeThreat.READING_SKIP_ANOMALY in d.threats, True)
 
     d = evaluate_gaze(_sig("F03", regression_rate=0.10, word_skip_rate=0.15))
-    check("UT-F03: normal reading → no anomaly",
+    tr.expect("UT-F03: normal reading → no anomaly",
           GazeThreat.READING_SKIP_ANOMALY in d.threats, False)
 
     # ── Group G: audit_gaze_surface ───────────────────────────────────────────
     clean = [_sig(f"G{i}", hardware_calibrated=True, anti_spoof_passed=True)
              for i in range(5)]
     audit = audit_gaze_surface(clean)
-    check("UT-G01: all clean → SURFACE_CLEAN",  audit.surface_verdict, GazeSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-G02: trusted == 5",                audit.trusted, 5)
+    tr.expect("UT-G01: all clean → SURFACE_CLEAN",  audit.surface_verdict, GazeSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-G02: trusted == 5",                audit.trusted, 5)
 
     one_rejected = [
         _sig("G10", hardware_calibrated=True, anti_spoof_passed=True),
         _sig("G11", gaze_pupil_consistent=False),
     ]
     audit = audit_gaze_surface(one_rejected)
-    check("UT-G03: 1 rejected → CONTAMINATED",
+    tr.expect("UT-G03: 1 rejected → CONTAMINATED",
           audit.surface_verdict, GazeSurfaceVerdict.SURFACE_CONTAMINATED)
 
     three_rejected = [_sig(f"G2{i}", gaze_pupil_consistent=False) for i in range(3)]
     audit = audit_gaze_surface(three_rejected)
-    check("UT-G04: 3 rejected → COMPROMISED",
+    tr.expect("UT-G04: 3 rejected → COMPROMISED",
           audit.surface_verdict, GazeSurfaceVerdict.SURFACE_COMPROMISED)
 
     empty = audit_gaze_surface([])
-    check("UT-G05: empty → SURFACE_CLEAN", empty.surface_verdict, GazeSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-G05: empty → SURFACE_CLEAN", empty.surface_verdict, GazeSurfaceVerdict.SURFACE_CLEAN)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
 
     # ST-01: 1000 clean calibrated → SURFACE_CLEAN
     st1 = [_sig(f"s1_{i}", hardware_calibrated=True, anti_spoof_passed=True) for i in range(1000)]
     a1 = audit_gaze_surface(st1)
-    check("ST-01: 1000 clean → SURFACE_CLEAN", a1.surface_verdict, GazeSurfaceVerdict.SURFACE_CLEAN)
-    check("ST-01b: trusted == 1000",            a1.trusted, 1000)
+    tr.expect("ST-01: 1000 clean → SURFACE_CLEAN", a1.surface_verdict, GazeSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("ST-01b: trusted == 1000",            a1.trusted, 1000)
 
     # ST-02: 500 spoof attacks → all REJECTED, COMPROMISED
     st2 = [_sig(f"s2_{i}", gaze_pupil_consistent=False) for i in range(500)]
     a2 = audit_gaze_surface(st2)
-    check("ST-02: 500 spoof → SURFACE_COMPROMISED",
+    tr.expect("ST-02: 500 spoof → SURFACE_COMPROMISED",
           a2.surface_verdict, GazeSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-02b: rejected == 500", a2.rejected, 500)
+    tr.expect("ST-02b: rejected == 500", a2.rejected, 500)
 
     # ST-03: mixed 800 clean + 200 spoofed → COMPROMISED
     st3 = (
@@ -498,43 +492,43 @@ def _run_tests() -> None:
         + [_sig(f"s3b{i}", gaze_pupil_consistent=False) for i in range(200)]
     )
     a3 = audit_gaze_surface(st3)
-    check("ST-03: 200 spoof → COMPROMISED",
+    tr.expect("ST-03: 200 spoof → COMPROMISED",
           a3.surface_verdict, GazeSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-03b: trusted == 800",  a3.trusted, 800)
-    check("ST-03c: rejected == 200", a3.rejected, 200)
+    tr.expect("ST-03b: trusted == 800",  a3.trusted, 800)
+    tr.expect("ST-03c: rejected == 200", a3.rejected, 200)
 
     # ST-04: blink anomaly flood → all SUSPECT
     st4 = [_sig(f"s4_{i}", blinks_per_minute=0.5) for i in range(300)]
     a4 = audit_gaze_surface(st4)
-    check("ST-04: 300 blink anomaly → all SUSPECT", a4.suspect, 300)
-    check("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, GazeSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("ST-04: 300 blink anomaly → all SUSPECT", a4.suspect, 300)
+    tr.expect("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, GazeSurfaceVerdict.SURFACE_DEGRADED)
 
     # ST-05: bad saccades mass → all REJECTED
     st5 = [_sig(f"s5_{i}",
                 saccades=tuple(Saccade(amplitude_deg=5.0, peak_velocity_deg_s=5.0) for _ in range(10)))
            for i in range(100)]
     a5 = audit_gaze_surface(st5)
-    check("ST-05: 100 saccade fail → all REJECTED", a5.rejected, 100)
-    check("ST-05b: SURFACE_COMPROMISED",
+    tr.expect("ST-05: 100 saccade fail → all REJECTED", a5.rejected, 100)
+    tr.expect("ST-05b: SURFACE_COMPROMISED",
           a5.surface_verdict, GazeSurfaceVerdict.SURFACE_COMPROMISED)
 
     # ST-06: 2 rejected → CONTAMINATED
     st6 = [_sig(f"s6_{i}", gaze_pupil_consistent=False) for i in range(2)]
     a6 = audit_gaze_surface(st6)
-    check("ST-06: 2 rejected → CONTAMINATED",
+    tr.expect("ST-06: 2 rejected → CONTAMINATED",
           a6.surface_verdict, GazeSurfaceVerdict.SURFACE_CONTAMINATED)
 
     # ST-07: mean_fixation_ms reported correctly
     d7 = evaluate_gaze(_sig("s7",
                              fixations=tuple(Fixation(0.0, 0.0, 300.0) for _ in range(5))))
-    check("ST-07: mean_fixation_ms == 300.0", d7.mean_fixation_ms, 300.0)
+    tr.expect("ST-07: mean_fixation_ms == 300.0", d7.mean_fixation_ms, 300.0)
 
     # ST-08: high_severity_count threshold for COMPROMISED
     st8 = [_sig(f"s8_{i}", gaze_pupil_consistent=False) for i in range(3)]
     a8 = audit_gaze_surface(st8)
-    check("ST-08: high_sev == 3 → COMPROMISED",
+    tr.expect("ST-08: high_sev == 3 → COMPROMISED",
           a8.surface_verdict, GazeSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-08b: high_severity_count == 3", a8.high_severity_count, 3)
+    tr.expect("ST-08b: high_severity_count == 3", a8.high_severity_count, 3)
 
     # ST-09: threat_distribution accuracy
     st9 = (
@@ -542,14 +536,12 @@ def _run_tests() -> None:
         + [_sig(f"s9b{i}", blinks_per_minute=0.5) for i in range(100)]
     )
     a9 = audit_gaze_surface(st9)
-    check("ST-09: AUTHENTIC dist == 200",
+    tr.expect("ST-09: AUTHENTIC dist == 200",
           a9.threat_distribution[GazeThreat.AUTHENTIC.value], 200)
-    check("ST-09b: BLINK_RATE dist == 100",
+    tr.expect("ST-09b: BLINK_RATE dist == 100",
           a9.threat_distribution[GazeThreat.BLINK_RATE_ANOMALY.value], 100)
 
-    print(f"\neye_movement_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 

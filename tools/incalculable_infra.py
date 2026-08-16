@@ -47,6 +47,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -493,39 +494,28 @@ def calculable_signal(signal_id: str = "calc") -> IncalculableSignal:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== incalculable_infra tests ===\n")
+    tr = TestRunner('incalculable_infra  —  unit tests')
+    tr.header()
 
     # 1. Halting problem → PROVABLY_UNDECIDABLE, binding 5
     dec = assess_incalculability(halting_problem_signal())
-    check("halting: PROVABLY_UNDECIDABLE",
+    tr.ok("halting: PROVABLY_UNDECIDABLE",
           dec.verdict == CalculabilityVerdict.PROVABLY_UNDECIDABLE)
-    check("halting: binding 5", dec.binding_level == 5)
+    tr.ok("halting: binding 5", dec.binding_level == 5)
 
     # 2. Gödel sentence → PROVABLY_UNDECIDABLE
     dec = assess_incalculability(godel_sentence_signal())
-    check("gödel: PROVABLY_UNDECIDABLE",
+    tr.ok("gödel: PROVABLY_UNDECIDABLE",
           dec.verdict == CalculabilityVerdict.PROVABLY_UNDECIDABLE)
 
     # 3. Calculable signal → CALCULABLE, binding 5
     dec = assess_incalculability(calculable_signal())
-    check("calculable: CALCULABLE", dec.verdict == CalculabilityVerdict.CALCULABLE)
-    check("calculable: binding 5", dec.binding_level == 5)
+    tr.ok("calculable: CALCULABLE", dec.verdict == CalculabilityVerdict.CALCULABLE)
+    tr.ok("calculable: binding 5", dec.binding_level == 5)
 
     # 4. Chaotic weather → PROVABLY_HARD or CONTINGENTLY_HARD (empirically demonstrated)
     dec = assess_incalculability(chaotic_weather_signal())
-    check("weather: CONTINGENTLY_HARD or PROVABLY_HARD",
+    tr.ok("weather: CONTINGENTLY_HARD or PROVABLY_HARD",
           dec.verdict in (CalculabilityVerdict.CONTINGENTLY_HARD,
                           CalculabilityVerdict.PROVABLY_HARD))
 
@@ -538,7 +528,7 @@ def _run_tests() -> None:
     )
     dec_suspected = assess_incalculability(sig)
     dec_proved    = assess_incalculability(godel_sentence_signal())
-    check("suspected < proved binding", dec_suspected.binding_level < dec_proved.binding_level)
+    tr.ok("suspected < proved binding", dec_suspected.binding_level < dec_proved.binding_level)
 
     # 6. Approximation available reduces governance impact
     sig_no_approx = IncalculableSignal(
@@ -558,7 +548,7 @@ def _run_tests() -> None:
     )
     dec_no   = assess_incalculability(sig_no_approx)
     dec_with = assess_incalculability(sig_with_approx)
-    check("approximation: binding with_approx ≤ binding no_approx",
+    tr.ok("approximation: binding with_approx ≤ binding no_approx",
           dec_with.binding_level <= dec_no.binding_level)
 
     # 7. Non-measurable → PROVABLY_UNDECIDABLE (formally proved)
@@ -569,7 +559,7 @@ def _run_tests() -> None:
         description="Vitali set: no Lebesgue measure assignable.",
     )
     dec = assess_incalculability(sig)
-    check("non-measurable: PROVABLY_UNDECIDABLE",
+    tr.ok("non-measurable: PROVABLY_UNDECIDABLE",
           dec.verdict == CalculabilityVerdict.PROVABLY_UNDECIDABLE)
 
     # 8. Kolmogorov random (formally proved) → PROVABLY_UNDECIDABLE
@@ -580,7 +570,7 @@ def _run_tests() -> None:
         description="This string has maximal Kolmogorov complexity.",
     )
     dec = assess_incalculability(sig)
-    check("kolmogorov: PROVABLY_UNDECIDABLE",
+    tr.ok("kolmogorov: PROVABLY_UNDECIDABLE",
           dec.verdict == CalculabilityVerdict.PROVABLY_UNDECIDABLE)
 
     # 9. Omega random → PROVABLY_UNDECIDABLE
@@ -591,7 +581,7 @@ def _run_tests() -> None:
         description="Chaitin's Omega: halting probability, Turing-incomputable.",
     )
     dec = assess_incalculability(sig)
-    check("omega random: PROVABLY_UNDECIDABLE",
+    tr.ok("omega random: PROVABLY_UNDECIDABLE",
           dec.verdict == CalculabilityVerdict.PROVABLY_UNDECIDABLE)
 
     # 10. Formal undefinability → PROVABLY_UNDECIDABLE
@@ -602,53 +592,49 @@ def _run_tests() -> None:
         description="Russell paradox: the set of all sets not containing themselves.",
     )
     dec = assess_incalculability(sig)
-    check("formal undefinable: PROVABLY_UNDECIDABLE",
+    tr.ok("formal undefinable: PROVABLY_UNDECIDABLE",
           dec.verdict == CalculabilityVerdict.PROVABLY_UNDECIDABLE)
 
     # 11. Binding always in [1, 5]
     for i, sig in enumerate([halting_problem_signal(), chaotic_weather_signal(),
                                calculable_signal(), godel_sentence_signal()]):
         d = assess_incalculability(sig)
-        check(f"binding in [1,5] for sig {i}", 1 <= d.binding_level <= 5)
+        tr.ok(f"binding in [1,5] for sig {i}", 1 <= d.binding_level <= 5)
 
     # 12. Surface audit: all calculable → MANAGEABLE
     decisions = [assess_incalculability(calculable_signal(f"c{i}")) for i in range(5)]
     audit = audit_incalculable_surface(decisions)
-    check("all calculable: MANAGEABLE",
+    tr.ok("all calculable: MANAGEABLE",
           audit.surface_verdict == IncalculableSurface.INCALC_MANAGEABLE)
 
     # 13. Surface audit: all undecidable → SYSTEMIC
     decisions = [assess_incalculability(halting_problem_signal(f"h{i}")) for i in range(5)]
     audit = audit_incalculable_surface(decisions)
-    check("all undecidable: SYSTEMIC or DOMINANT",
+    tr.ok("all undecidable: SYSTEMIC or DOMINANT",
           audit.surface_verdict in (IncalculableSurface.INCALC_SYSTEMIC,
                                      IncalculableSurface.INCALC_DOMINANT))
 
     # 14. Empty surface audit
     audit = audit_incalculable_surface([])
-    check("empty: MANAGEABLE", audit.surface_verdict == IncalculableSurface.INCALC_MANAGEABLE)
-    check("empty: total=0", audit.total_signals == 0)
+    tr.ok("empty: MANAGEABLE", audit.surface_verdict == IncalculableSurface.INCALC_MANAGEABLE)
+    tr.ok("empty: total=0", audit.total_signals == 0)
 
     # 15. Summary non-empty
     dec = assess_incalculability(halting_problem_signal())
-    check("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
+    tr.ok("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
 
     # 16. Governance action non-empty
     decisions = [assess_incalculability(halting_problem_signal())]
     audit = audit_incalculable_surface(decisions)
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
     # 17. Theoretical note populated for all classes
     for cls in IncalculabilityClass:
-        check(f"theoretical note: {cls.value}", cls in _THEORETICAL_NOTES)
+        tr.ok(f"theoretical note: {cls.value}", cls in _THEORETICAL_NOTES)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

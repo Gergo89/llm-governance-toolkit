@@ -44,6 +44,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -294,37 +295,25 @@ def audit_pr_network(estimators: Sequence[PREstimator]) -> PRNetworkAudit:
 # ─── test suite ───────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('predictive_recursion_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     def checkclose(label: str, got: float, expected: float, tol: float = 1e-9) -> None:
-        nonlocal passed, failed
-        if abs(got - expected) <= tol:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected ≈{expected!r} (±{tol})")
+        tr.ok(label, abs(got - expected) <= tol)
 
     # ── Group A: basic estimator mechanics ────────────────────────────────────
 
     est = PREstimator("A01")
     checkclose("UT-A01: initial weights sum to 1",
                sum(est.weights), 1.0, tol=1e-12)
-    check("UT-A02: initial n_obs == 0", est.n_obs, 0)
-    check("UT-A03: initial state INSUFFICIENT_DATA", est.state(), PRState.INSUFFICIENT_DATA)
-    check("UT-A04: initial governance GATHER_MORE",  est.governance(), PRGovernance.GATHER_MORE)
+    tr.expect("UT-A02: initial n_obs == 0", est.n_obs, 0)
+    tr.expect("UT-A03: initial state INSUFFICIENT_DATA", est.state(), PRState.INSUFFICIENT_DATA)
+    tr.expect("UT-A04: initial governance GATHER_MORE",  est.governance(), PRGovernance.GATHER_MORE)
 
     est.update(likelihood_uniform())
     checkclose("UT-A05: after uniform obs, weights still sum to 1",
                sum(est.weights), 1.0, tol=1e-9)
-    check("UT-A06: n_obs == 1", est.n_obs, 1)
+    tr.expect("UT-A06: n_obs == 1", est.n_obs, 1)
 
     # ── Group B: convergence to high binding ──────────────────────────────────
 
@@ -332,10 +321,10 @@ def _run_tests() -> None:
     lhood = likelihood_from_binding(5, noise=0.05)
     for _ in range(50):
         est_high.update(lhood)
-    check("UT-B01: 50 high-binding obs → mode == 5", est_high.posterior_mode(), 5)
-    check("UT-B02: converged to CONVERGED_HIGH", est_high.state(), PRState.CONVERGED_HIGH)
-    check("UT-B03: governance AFFIRM", est_high.governance(), PRGovernance.AFFIRM)
-    check("UT-B04: is_converged() True", est_high.is_converged(), True)
+    tr.expect("UT-B01: 50 high-binding obs → mode == 5", est_high.posterior_mode(), 5)
+    tr.expect("UT-B02: converged to CONVERGED_HIGH", est_high.state(), PRState.CONVERGED_HIGH)
+    tr.expect("UT-B03: governance AFFIRM", est_high.governance(), PRGovernance.AFFIRM)
+    tr.expect("UT-B04: is_converged() True", est_high.is_converged(), True)
 
     # ── Group C: convergence to low binding ───────────────────────────────────
 
@@ -343,9 +332,9 @@ def _run_tests() -> None:
     lhood_low = likelihood_from_binding(1, noise=0.05)
     for _ in range(50):
         est_low.update(lhood_low)
-    check("UT-C01: 50 low-binding obs → mode == 1", est_low.posterior_mode(), 1)
-    check("UT-C02: converged to CONVERGED_LOW", est_low.state(), PRState.CONVERGED_LOW)
-    check("UT-C03: governance WITHHOLD", est_low.governance(), PRGovernance.WITHHOLD)
+    tr.expect("UT-C01: 50 low-binding obs → mode == 1", est_low.posterior_mode(), 1)
+    tr.expect("UT-C02: converged to CONVERGED_LOW", est_low.state(), PRState.CONVERGED_LOW)
+    tr.expect("UT-C03: governance WITHHOLD", est_low.governance(), PRGovernance.WITHHOLD)
 
     # ── Group D: medium binding ───────────────────────────────────────────────
 
@@ -353,8 +342,8 @@ def _run_tests() -> None:
     lhood_med = likelihood_from_binding(3, noise=0.1)
     for _ in range(50):
         est_med.update(lhood_med)
-    check("UT-D01: 50 medium obs → mode == 3", est_med.posterior_mode(), 3)
-    check("UT-D02: CONVERGED_MEDIUM or CONVERGED_HIGH",
+    tr.expect("UT-D01: 50 medium obs → mode == 3", est_med.posterior_mode(), 3)
+    tr.expect("UT-D02: CONVERGED_MEDIUM or CONVERGED_HIGH",
           est_med.state() in (PRState.CONVERGED_MEDIUM, PRState.CONVERGED_HIGH, PRState.CONVERGED_LOW), True)
 
     # ── Group E: conflicted / oscillating ─────────────────────────────────────
@@ -363,7 +352,7 @@ def _run_tests() -> None:
     lc = likelihood_conflicted(1, 5)
     for _ in range(30):
         est_osc.update(lc)
-    check("UT-E01: conflicted likelihood → OSCILLATING or INSUFFICIENT_DATA",
+    tr.expect("UT-E01: conflicted likelihood → OSCILLATING or INSUFFICIENT_DATA",
           est_osc.state() in (PRState.OSCILLATING, PRState.INSUFFICIENT_DATA,
                                PRState.CONVERGED_LOW, PRState.CONVERGED_HIGH), True)
 
@@ -374,12 +363,12 @@ def _run_tests() -> None:
     for _ in range(50):
         est_snap.update(lhood_h)
     snap = snapshot(est_snap)
-    check("UT-F01: snap.claim_id == F01", snap.claim_id, "F01")
-    check("UT-F02: snap.n_obs == 50",    snap.n_obs, 50)
-    check("UT-F03: snap.posterior_mode == 5", snap.posterior_mode, 5)
+    tr.expect("UT-F01: snap.claim_id == F01", snap.claim_id, "F01")
+    tr.expect("UT-F02: snap.n_obs == 50",    snap.n_obs, 50)
+    tr.expect("UT-F03: snap.posterior_mode == 5", snap.posterior_mode, 5)
     checkclose("UT-F04: snap.weights sum to 1", sum(snap.weights), 1.0, tol=1e-9)
-    check("UT-F05: snap.state == CONVERGED_HIGH", snap.state, PRState.CONVERGED_HIGH)
-    check("UT-F06: snap.governance == AFFIRM", snap.governance, PRGovernance.AFFIRM)
+    tr.expect("UT-F05: snap.state == CONVERGED_HIGH", snap.state, PRState.CONVERGED_HIGH)
+    tr.expect("UT-F06: snap.governance == AFFIRM", snap.governance, PRGovernance.AFFIRM)
 
     # ── Group G: step size schedule ───────────────────────────────────────────
 
@@ -389,13 +378,13 @@ def _run_tests() -> None:
     a10 = est_ss.step_size()
     est_ss.n_obs = 100
     a100 = est_ss.step_size()
-    check("UT-G01: step sizes decrease: a1 > a10 > a100",
+    tr.expect("UT-G01: step sizes decrease: a1 > a10 > a100",
           a1 > a10 > a100, True)
 
     # ── Group H: likelihood constructors ──────────────────────────────────────
 
     lh5 = likelihood_from_binding(5)
-    check("UT-H01: binding=5 likelihood peaks at index 4",
+    tr.expect("UT-H01: binding=5 likelihood peaks at index 4",
           lh5.index(max(lh5)), 4)
 
     lu = likelihood_uniform()
@@ -413,10 +402,10 @@ def _run_tests() -> None:
             e.update(likelihood_from_binding(5))
         nets.append(e)
     audit = audit_pr_network(nets)
-    check("UT-I01: all converged_high → network AFFIRM",
+    tr.expect("UT-I01: all converged_high → network AFFIRM",
           audit.network_governance, PRGovernance.AFFIRM)
-    check("UT-I02: total_estimators == 5", audit.total_estimators, 5)
-    check("UT-I03: converged_high == 5",   audit.converged_high, 5)
+    tr.expect("UT-I02: total_estimators == 5", audit.total_estimators, 5)
+    tr.expect("UT-I03: converged_high == 5",   audit.converged_high, 5)
 
     # Mixed network
     e_low = PREstimator("I_low")
@@ -424,11 +413,11 @@ def _run_tests() -> None:
         e_low.update(likelihood_from_binding(1))
     mixed_nets = nets[:3] + [e_low]
     audit2 = audit_pr_network(mixed_nets)
-    check("UT-I04: mixed network → WITHHOLD (worst-case)",
+    tr.expect("UT-I04: mixed network → WITHHOLD (worst-case)",
           audit2.network_governance, PRGovernance.WITHHOLD)
 
     empty_audit = audit_pr_network([])
-    check("UT-I05: empty → GATHER_MORE",
+    tr.expect("UT-I05: empty → GATHER_MORE",
           empty_audit.network_governance, PRGovernance.GATHER_MORE)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
@@ -442,9 +431,9 @@ def _run_tests() -> None:
             e.update(lh)
         st1_ests.append(e)
     a1 = audit_pr_network(st1_ests)
-    check("ST-01: 100 estimators all high → network AFFIRM",
+    tr.expect("ST-01: 100 estimators all high → network AFFIRM",
           a1.network_governance, PRGovernance.AFFIRM)
-    check("ST-01b: all converged_high == 100", a1.converged_high, 100)
+    tr.expect("ST-01b: all converged_high == 100", a1.converged_high, 100)
 
     # ST-02: 100 estimators with low binding → all CONVERGED_LOW → WITHHOLD
     ll = likelihood_from_binding(1)
@@ -455,9 +444,9 @@ def _run_tests() -> None:
             e.update(ll)
         st2_ests.append(e)
     a2 = audit_pr_network(st2_ests)
-    check("ST-02: all low → network WITHHOLD",
+    tr.expect("ST-02: all low → network WITHHOLD",
           a2.network_governance, PRGovernance.WITHHOLD)
-    check("ST-02b: converged_low == 100", a2.converged_low, 100)
+    tr.expect("ST-02b: converged_low == 100", a2.converged_low, 100)
 
     # ST-03: 50 high + 50 insufficient data → worst-case GATHER_MORE
     st3_ests = list(st1_ests[:50])
@@ -466,9 +455,9 @@ def _run_tests() -> None:
         e.update(likelihood_uniform())   # only 1 obs → INSUFFICIENT_DATA
         st3_ests.append(e)
     a3 = audit_pr_network(st3_ests)
-    check("ST-03: 50 high + 50 insufficient → GATHER_MORE",
+    tr.expect("ST-03: 50 high + 50 insufficient → GATHER_MORE",
           a3.network_governance, PRGovernance.GATHER_MORE)
-    check("ST-03b: insufficient_data == 50", a3.insufficient_data, 50)
+    tr.expect("ST-03b: insufficient_data == 50", a3.insufficient_data, 50)
 
     # ST-04: convergence rate — more observations → lower CI width
     est_early = PREstimator("st4_early")
@@ -477,7 +466,7 @@ def _run_tests() -> None:
         est_early.update(lh)
     for _ in range(200):
         est_late.update(lh)
-    check("ST-04: 200 obs CI ≤ 10 obs CI",
+    tr.expect("ST-04: 200 obs CI ≤ 10 obs CI",
           est_late.ci_width() <= est_early.ci_width(), True)
 
     # ST-05: weight normalisation invariant across 1000 updates
@@ -486,13 +475,13 @@ def _run_tests() -> None:
         est_norm.update(likelihood_from_binding((k % 5) + 1))
     checkclose("ST-05: weights still sum to 1 after 1000 updates",
                sum(est_norm.weights), 1.0, tol=1e-6)
-    check("ST-05b: n_obs == 1000", est_norm.n_obs, 1000)
+    tr.expect("ST-05b: n_obs == 1000", est_norm.n_obs, 1000)
 
     # ST-06: history length == n_obs
     est_hist = PREstimator("st6")
     for _ in range(30):
         est_hist.update(likelihood_from_binding(4))
-    check("ST-06: history length == 30", len(est_hist.history), 30)
+    tr.expect("ST-06: history length == 30", len(est_hist.history), 30)
 
     # ST-07: mean_n_obs in audit
     st7_ests = [PREstimator(f"st7_{i}") for i in range(10)]
@@ -508,13 +497,11 @@ def _run_tests() -> None:
         est_deg.update([1.0 / _GRID_SIZE] * _GRID_SIZE)
     try:
         est_deg.update([0.0, 0.0, 0.0, 0.0, 0.0])   # degenerate — should be skipped
-        check("ST-08: degenerate likelihood skipped gracefully", True, True)
+        tr.expect("ST-08: degenerate likelihood skipped gracefully", True, True)
     except Exception as exc:
-        check("ST-08: degenerate likelihood skipped gracefully", f"raised {exc}", True)
+        tr.expect("ST-08: degenerate likelihood skipped gracefully", f"raised {exc}", True)
 
-    print(f"\npredictive_recursion_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 

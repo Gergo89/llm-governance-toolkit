@@ -41,6 +41,7 @@ import traceback
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -492,25 +493,14 @@ def run_stress_suite(
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== stress_test_infra tests ===\n")
+    tr = TestRunner('stress_test_infra  —  unit tests')
+    tr.header()
 
     # 1. Empty tester → RESILIENT (no scenarios, 100% pass rate)
     tester = StressTester("empty_module")
     report = tester.run()
-    check("empty tester: RESILIENT", report.resilience_verdict == InfraResilienceVerdict.RESILIENT)
-    check("empty tester: binding 5", report.binding_level == 5)
+    tr.ok("empty tester: RESILIENT", report.resilience_verdict == InfraResilienceVerdict.RESILIENT)
+    tr.ok("empty tester: binding 5", report.binding_level == 5)
 
     # 2. All-pass tester → RESILIENT
     tester = StressTester("all_pass")
@@ -521,9 +511,9 @@ def _run_tests() -> None:
             lambda i=idx: _pass(f"p{i}", StressDimension.ADVERSARIAL),
         )
     report = tester.run()
-    check("all-pass: RESILIENT", report.resilience_verdict == InfraResilienceVerdict.RESILIENT)
-    check("all-pass: pass_rate=1.0", report.pass_rate == 1.0)
-    check("all-pass: 10 passed", report.passed == 10)
+    tr.ok("all-pass: RESILIENT", report.resilience_verdict == InfraResilienceVerdict.RESILIENT)
+    tr.ok("all-pass: pass_rate=1.0", report.pass_rate == 1.0)
+    tr.ok("all-pass: 10 passed", report.passed == 10)
 
     # 3. All-fail tester → VOID
     tester = StressTester("all_fail")
@@ -534,8 +524,8 @@ def _run_tests() -> None:
             lambda i=idx: _fail(f"f{i}", StressDimension.ADVERSARIAL, "deliberate fail"),
         )
     report = tester.run()
-    check("all-fail: VOID", report.resilience_verdict == InfraResilienceVerdict.VOID)
-    check("all-fail: pass_rate=0.0", report.pass_rate == 0.0)
+    tr.ok("all-fail: VOID", report.resilience_verdict == InfraResilienceVerdict.VOID)
+    tr.ok("all-fail: pass_rate=0.0", report.pass_rate == 0.0)
 
     # 4. All-error tester → VOID
     def _boom() -> StressResult:
@@ -545,8 +535,8 @@ def _run_tests() -> None:
     for i in range(10):
         tester.add_adversarial(f"e{i}", f"error scenario {i}", _boom)
     report = tester.run()
-    check("all-error: VOID", report.resilience_verdict == InfraResilienceVerdict.VOID)
-    check("all-error: errored=10", report.errored == 10)
+    tr.ok("all-error: VOID", report.resilience_verdict == InfraResilienceVerdict.VOID)
+    tr.ok("all-error: errored=10", report.errored == 10)
 
     # 5. 80% pass → UNSTABLE
     tester = StressTester("mostly_pass")
@@ -563,7 +553,7 @@ def _run_tests() -> None:
             lambda i=idx: _fail(f"bad{i}", StressDimension.BOUNDARY, "fail"),
         )
     report = tester.run()
-    check("80% pass: UNSTABLE", report.resilience_verdict == InfraResilienceVerdict.UNSTABLE)
+    tr.ok("80% pass: UNSTABLE", report.resilience_verdict == InfraResilienceVerdict.UNSTABLE)
 
     # 6. 50% pass → BRITTLE
     tester = StressTester("half_pass")
@@ -580,7 +570,7 @@ def _run_tests() -> None:
                 lambda i=idx: _fail(f"h{i}", StressDimension.COMBINATORIAL, "deliberate fail"),
             )
     report = tester.run()
-    check("50% pass: BRITTLE or DEGRADED",
+    tr.ok("50% pass: BRITTLE or DEGRADED",
           report.resilience_verdict in (InfraResilienceVerdict.BRITTLE,
                                         InfraResilienceVerdict.DEGRADED))
 
@@ -589,10 +579,10 @@ def _run_tests() -> None:
     tester.add_adversarial("a1", "adv", lambda: _pass("a1", StressDimension.ADVERSARIAL))
     tester.add_boundary("b1", "bound", lambda: _fail("b1", StressDimension.BOUNDARY, "x"))
     report = tester.run()
-    check("per_dim: ADVERSARIAL present", "ADVERSARIAL" in report.per_dimension_pass_rate)
-    check("per_dim: BOUNDARY present", "BOUNDARY" in report.per_dimension_pass_rate)
-    check("per_dim: adversarial 1.0", report.per_dimension_pass_rate["ADVERSARIAL"] == 1.0)
-    check("per_dim: boundary 0.0", report.per_dimension_pass_rate["BOUNDARY"] == 0.0)
+    tr.ok("per_dim: ADVERSARIAL present", "ADVERSARIAL" in report.per_dimension_pass_rate)
+    tr.ok("per_dim: BOUNDARY present", "BOUNDARY" in report.per_dimension_pass_rate)
+    tr.ok("per_dim: adversarial 1.0", report.per_dimension_pass_rate["ADVERSARIAL"] == 1.0)
+    tr.ok("per_dim: boundary 0.0", report.per_dimension_pass_rate["BOUNDARY"] == 0.0)
 
     # 8. Monotonicity checker — strictly decreasing is OK
     tester = check_monotonicity(
@@ -601,7 +591,7 @@ def _run_tests() -> None:
         [5, 4, 3, 2, 1],
     )
     report = tester.run()
-    check("monotonicity: decreasing → all pass", report.passed == 5)
+    tr.ok("monotonicity: decreasing → all pass", report.passed == 5)
 
     # 9. Monotonicity checker — increase should FAIL
     tester2 = check_monotonicity(
@@ -610,7 +600,7 @@ def _run_tests() -> None:
         [5, 3, 4],      # goes 5→3→4: 4 > 3 is a violation
     )
     report2 = tester2.run()
-    check("monotonicity: increase → at least 1 fail", report2.failed >= 1)
+    tr.ok("monotonicity: increase → at least 1 fail", report2.failed >= 1)
 
     # 10. Idempotency checker — deterministic function → all pass
     tester3 = check_idempotency(
@@ -619,7 +609,7 @@ def _run_tests() -> None:
         [1, 2, 3, 4, 5],
     )
     report3 = tester3.run()
-    check("idempotency: deterministic → all pass", report3.passed == 5)
+    tr.ok("idempotency: deterministic → all pass", report3.passed == 5)
 
     # 11. run_stress_suite convenience API
     scenarios = [
@@ -629,19 +619,19 @@ def _run_tests() -> None:
                        lambda: _fail("s2", StressDimension.SYMMETRY, "asymmetric")),
     ]
     report = run_stress_suite("api_module", scenarios)
-    check("run_stress_suite: total=2", report.total_scenarios == 2)
-    check("run_stress_suite: passed=1, failed=1",
+    tr.ok("run_stress_suite: total=2", report.total_scenarios == 2)
+    tr.ok("run_stress_suite: passed=1, failed=1",
           report.passed == 1 and report.failed == 1)
 
     # 12. Summary text non-empty
-    check("summary non-empty", isinstance(report.summary, str) and len(report.summary) > 0)
+    tr.ok("summary non-empty", isinstance(report.summary, str) and len(report.summary) > 0)
 
     # 13. Governance action non-empty
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(report.governance_action, str) and len(report.governance_action) > 0)
 
     # 14. Binding level in [1, 5]
-    check("binding level in [1,5]", 1 <= report.binding_level <= 5)
+    tr.ok("binding level in [1,5]", 1 <= report.binding_level <= 5)
 
     # 15. SKIP scenarios not counted in pass_rate denominator
     tester = StressTester("skip_test")
@@ -654,16 +644,16 @@ def _run_tests() -> None:
         lambda: StressResult("skipped", StressDimension.ADVERSARIAL, StressOutcome.SKIP),
     )
     report = tester.run()
-    check("skip: total=2", report.total_scenarios == 2)
-    check("skip: pass_rate = 1.0 (only active counted)", report.pass_rate == 1.0)
-    check("skip: skipped=1", report.skipped == 1)
+    tr.ok("skip: total=2", report.total_scenarios == 2)
+    tr.ok("skip: pass_rate = 1.0 (only active counted)", report.pass_rate == 1.0)
+    tr.ok("skip: skipped=1", report.skipped == 1)
 
     # 16. _error helper populates exception_text
     try:
         raise RuntimeError("test error")
     except RuntimeError as exc:
         err_result = _error("test", StressDimension.ADVERSARIAL, exc)
-    check("_error: exception_text populated",
+    tr.ok("_error: exception_text populated",
           err_result.exception_text is not None and "RuntimeError" in err_result.exception_text)
 
     # 17. Binding variance computed when binding values present
@@ -676,15 +666,11 @@ def _run_tests() -> None:
                                  binding_before=b, binding_after=b),
         )
     report = tester.run()
-    check("binding_variance computed", report.binding_variance is not None)
-    check("binding_values populated", len(report.binding_values) > 0)
+    tr.ok("binding_variance computed", report.binding_variance is not None)
+    tr.ok("binding_values populated", len(report.binding_values) > 0)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

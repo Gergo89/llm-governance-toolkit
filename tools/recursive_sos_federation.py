@@ -33,6 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
+from governance_core import TestRunner
 
 
 # ─── SoS architecture types (Maier 1998) ─────────────────────────────────────
@@ -220,7 +221,7 @@ class SoSNode:
     def max_interop_level(self) -> InteropLevel:
         if not self.interop_edges:
             return InteropLevel.NONE
-        return max(e.interop_level for e in self.interop_edges,
+        return max((e.interop_level for e in self.interop_edges),
                    key=lambda il: il.value)
 
     @property
@@ -400,20 +401,9 @@ def build_military_sos(federation_id: str) -> RecursiveSoSFederation:
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("recursive_sos_federation.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('recursive_sos_federation.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Binding from capability state
     print("\n[1] Binding from capability state")
@@ -423,14 +413,14 @@ def _run_tests() -> bool:
     n.observe_trust(0.9)
     n.observe_trust(0.9)
     n.observe_trust(0.9)
-    ok("fully_op+high_trust → 5", n.binding_level == 5)
+    tr.ok("fully_op+high_trust → 5", n.binding_level == 5)
 
     n2 = SoSNode("n2", capability_state=SoSCapabilityState.OFFLINE)
-    ok("offline → binding=1", n2.binding_level == 1)
+    tr.ok("offline → binding=1", n2.binding_level == 1)
 
     n3 = SoSNode("n3", capability_state=SoSCapabilityState.DEGRADED)
     n3.observe_trust(0.5)
-    ok("degraded → binding=2", n3.binding_level == 2)
+    tr.ok("degraded → binding=2", n3.binding_level == 2)
 
     # 2. Critical edge failures
     print("\n[2] Critical edge failures")
@@ -443,20 +433,20 @@ def _run_tests() -> bool:
     bl_before = n.binding_level
     n.report_critical_edge_failure()
     n.report_critical_edge_failure()
-    ok("2 crit failures reduces binding", n.binding_level < bl_before)
-    ok("2 crit failures → VOID", n.verdict == SoSVerdict.SOS_VOID)
+    tr.ok("2 crit failures reduces binding", n.binding_level < bl_before)
+    tr.ok("2 crit failures → VOID", n.verdict == SoSVerdict.SOS_VOID)
 
     # 3. No evidence → GATHER
     print("\n[3] No evidence → GATHER")
     n = SoSNode("n5")
-    ok("no evidence → GATHER", n.verdict == SoSVerdict.SOS_GATHER)
+    tr.ok("no evidence → GATHER", n.verdict == SoSVerdict.SOS_GATHER)
 
     # 4. Offline → VOID
     print("\n[4] Offline → VOID")
     n = SoSNode("n6", capability_state=SoSCapabilityState.OFFLINE)
     for _ in range(10):
         n.observe_trust(0.9)
-    ok("offline always VOID", n.verdict == SoSVerdict.SOS_VOID)
+    tr.ok("offline always VOID", n.verdict == SoSVerdict.SOS_VOID)
 
     # 5. Snapshot
     print("\n[5] Snapshot")
@@ -465,16 +455,16 @@ def _run_tests() -> bool:
     edge = SoSEdge("e1", "snap", "target", InteropLevel.DOMAIN, is_critical=True)
     n.add_edge(edge)
     s = snap_sos(n)
-    ok("snap: archetype=DIRECTED", s.archetype == SoSArchetype.DIRECTED)
-    ok("snap: n_critical_edges=1", s.n_critical_edges == 1)
-    ok("snap: max_interop=DOMAIN", s.max_interop == InteropLevel.DOMAIN)
+    tr.ok("snap: archetype=DIRECTED", s.archetype == SoSArchetype.DIRECTED)
+    tr.ok("snap: n_critical_edges=1", s.n_critical_edges == 1)
+    tr.ok("snap: max_interop=DOMAIN", s.max_interop == InteropLevel.DOMAIN)
 
     # 6. Military SoS builder
     print("\n[6] Military SoS")
     fed = build_military_sos("mil-001")
     a = fed.audit()
-    ok("at least 7 nodes", a.total_nodes >= 7)
-    ok("all nodes GATHER (no evidence)", a.gather_count == a.total_nodes)
+    tr.ok("at least 7 nodes", a.total_nodes >= 7)
+    tr.ok("all nodes GATHER (no evidence)", a.gather_count == a.total_nodes)
 
     # 7. Trust observation propagation
     print("\n[7] Trust observations")
@@ -483,9 +473,9 @@ def _run_tests() -> bool:
         for _ in range(5):
             node.observe_trust(0.9)
     a = fed.audit()
-    ok("affirm>0 after high trust", a.affirm_count > 0)
-    ok("void=0 when no failures", a.void_count == 0)
-    ok("verdict=AFFIRM", a.verdict == SoSVerdict.SOS_AFFIRM)
+    tr.ok("affirm>0 after high trust", a.affirm_count > 0)
+    tr.ok("void=0 when no failures", a.void_count == 0)
+    tr.ok("verdict=AFFIRM", a.verdict == SoSVerdict.SOS_AFFIRM)
 
     # 8. Low trust → WITHHOLD
     print("\n[8] Low trust → WITHHOLD")
@@ -494,23 +484,23 @@ def _run_tests() -> bool:
         for _ in range(5):
             node.observe_trust(0.2)
     a = fed.audit()
-    ok("low trust: affirm=0", a.affirm_count == 0)
-    ok("low trust: withhold or void", a.withhold_count + a.void_count > 0)
+    tr.ok("low trust: affirm=0", a.affirm_count == 0)
+    tr.ok("low trust: withhold or void", a.withhold_count + a.void_count > 0)
 
     # 9. Archetype distribution
     print("\n[9] Archetype distribution")
     fed = build_military_sos("mil-004")
     a = fed.audit()
     arch_dict = dict(a.archetype_distribution)
-    ok("DIRECTED present", "DIRECTED" in arch_dict)
-    ok("ACKNOWLEDGED present", "ACKNOWLEDGED" in arch_dict)
+    tr.ok("DIRECTED present", "DIRECTED" in arch_dict)
+    tr.ok("ACKNOWLEDGED present", "ACKNOWLEDGED" in arch_dict)
 
     # 10. Characteristics mean
     print("\n[10] Characteristics mean")
     c = SoSCharacteristics(
         autonomy=0.8, belonging=0.6, connectivity=0.7, diversity=0.5, emergence=0.4
     )
-    ok("characteristics mean=(0.8+0.6+0.7+0.5+0.4)/5",
+    tr.ok("characteristics mean=(0.8+0.6+0.7+0.5+0.4)/5",
        abs(c.mean() - 0.60) < 0.001)
 
     # 11. recursive_constituent_count
@@ -522,7 +512,7 @@ def _run_tests() -> bool:
     c1.add_constituent(c1_1)
     root.add_constituent(c1)
     root.add_constituent(c2)
-    ok("recursive count=4", root.recursive_constituent_count == 4)
+    tr.ok("recursive count=4", root.recursive_constituent_count == 4)
 
     # 12. add_constituent prevents duplicates
     print("\n[12] add_constituent deduplication")
@@ -530,7 +520,7 @@ def _run_tests() -> bool:
     child = SoSNode("child-x")
     parent.add_constituent(child)
     parent.add_constituent(child)
-    ok("no duplicates", parent.constituent_count == 1)
+    tr.ok("no duplicates", parent.constituent_count == 1)
 
     # 13. Void propagates to global verdict
     print("\n[13] VOID propagates to federation verdict")
@@ -547,29 +537,23 @@ def _run_tests() -> bool:
     fed = RecursiveSoSFederation("void-test", root)
     fed.register(offline)
     a = fed.audit()
-    ok("void propagates", a.verdict == SoSVerdict.SOS_VOID)
+    tr.ok("void propagates", a.verdict == SoSVerdict.SOS_VOID)
 
     # 14. Interop edge max level
     print("\n[14] Max interop level")
     n = SoSNode("interop-test")
     n.add_edge(SoSEdge("e1", "a", "b", InteropLevel.CONNECTED))
     n.add_edge(SoSEdge("e2", "a", "c", InteropLevel.ENTERPRISE))
-    ok("max interop=ENTERPRISE", n.max_interop_level == InteropLevel.ENTERPRISE)
+    tr.ok("max interop=ENTERPRISE", n.max_interop_level == InteropLevel.ENTERPRISE)
 
     # 15. Summary text
     print("\n[15] Summary sanity")
     fed = build_military_sos("summary-test")
     a = fed.audit()
-    ok("summary non-empty", len(a.summary) > 20)
-    ok("summary has verdict", a.verdict.value in a.summary)
+    tr.ok("summary non-empty", len(a.summary) > 20)
+    tr.ok("summary has verdict", a.verdict.value in a.summary)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

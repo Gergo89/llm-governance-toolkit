@@ -43,6 +43,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
+from governance_core import TestRunner
 
 
 # ─── detection signatures ─────────────────────────────────────────────────────
@@ -368,20 +369,9 @@ def audit_detector_surface(decisions: Sequence[DetectorDecision]) -> DetectorSur
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("em_signal_mixing_detector_infra.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('em_signal_mixing_detector_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Clean signal
     print("\n[1] Clean signal")
@@ -394,9 +384,9 @@ def _run_tests() -> bool:
         chain_attested=True,
     )
     d = detect_mixing(obs)
-    ok("clean: verdict=CLEAN", d.verdict == DetectorVerdict.DETECT_CLEAN)
-    ok("clean: binding=5", d.binding_level == 5)
-    ok("clean: CLEAN in signatures", MixingSignature.CLEAN in d.signatures)
+    tr.ok("clean: verdict=CLEAN", d.verdict == DetectorVerdict.DETECT_CLEAN)
+    tr.ok("clean: binding=5", d.binding_level == 5)
+    tr.ok("clean: CLEAN in signatures", MixingSignature.CLEAN in d.signatures)
 
     # 2. Spectral spur
     print("\n[2] Spectral spur detection")
@@ -408,9 +398,9 @@ def _run_tests() -> bool:
         snr_db=35.0,
     )
     d = detect_mixing(obs)
-    ok("spur: SPECTRAL_SPUR detected",
+    tr.ok("spur: SPECTRAL_SPUR detected",
        MixingSignature.SPECTRAL_SPUR in d.signatures)
-    ok("spur: severity=1", d.max_severity == 1)
+    tr.ok("spur: severity=1", d.max_severity == 1)
 
     # 3. Intermodulation fingerprint
     print("\n[3] Intermodulation fingerprint")
@@ -429,10 +419,10 @@ def _run_tests() -> bool:
         snr_db=25.0,
     )
     d = detect_mixing(obs)
-    ok("IM: INTERMOD_FINGERPRINT detected",
+    tr.ok("IM: INTERMOD_FINGERPRINT detected",
        MixingSignature.INTERMOD_FINGERPRINT in d.signatures)
-    ok("IM: severity=3", d.max_severity == 3)
-    ok("IM: verdict VOID or SEVERE",
+    tr.ok("IM: severity=3", d.max_severity == 3)
+    tr.ok("IM: verdict VOID or SEVERE",
        d.verdict in (DetectorVerdict.DETECT_VOID, DetectorVerdict.DETECT_SEVERE))
 
     # 4. Envelope anomaly
@@ -446,7 +436,7 @@ def _run_tests() -> bool:
         snr_db=30.0,
     )
     d = detect_mixing(obs)
-    ok("env: ENVELOPE_ANOMALY detected",
+    tr.ok("env: ENVELOPE_ANOMALY detected",
        MixingSignature.ENVELOPE_ANOMALY in d.signatures)
 
     # 5. Phase discontinuity
@@ -460,7 +450,7 @@ def _run_tests() -> bool:
         snr_db=30.0,
     )
     d = detect_mixing(obs)
-    ok("phase: PHASE_DISCONTINUITY detected",
+    tr.ok("phase: PHASE_DISCONTINUITY detected",
        MixingSignature.PHASE_DISCONTINUITY in d.signatures)
 
     # 6. Cross-channel leakage
@@ -474,7 +464,7 @@ def _run_tests() -> bool:
         snr_db=30.0,
     )
     d = detect_mixing(obs)
-    ok("leak: CROSS_CHANNEL_LEAKAGE detected",
+    tr.ok("leak: CROSS_CHANNEL_LEAKAGE detected",
        MixingSignature.CROSS_CHANNEL_LEAKAGE in d.signatures)
 
     # 7. Beat frequency
@@ -487,7 +477,7 @@ def _run_tests() -> bool:
         snr_db=30.0,
     )
     d = detect_mixing(obs)
-    ok("beat: BEAT_FREQUENCY detected",
+    tr.ok("beat: BEAT_FREQUENCY detected",
        MixingSignature.BEAT_FREQUENCY in d.signatures)
 
     # 8. Temporal inconsistency
@@ -500,7 +490,7 @@ def _run_tests() -> bool:
         snr_db=30.0,
     )
     d = detect_mixing(obs)
-    ok("temporal: TEMPORAL_INCONSISTENCY detected",
+    tr.ok("temporal: TEMPORAL_INCONSISTENCY detected",
        MixingSignature.TEMPORAL_INCONSISTENCY in d.signatures)
 
     # 9. Low SNR → VOID
@@ -512,8 +502,8 @@ def _run_tests() -> bool:
         snr_db=1.0,
     )
     d = detect_mixing(obs)
-    ok("low SNR → VOID", d.verdict == DetectorVerdict.DETECT_VOID)
-    ok("low SNR: binding=1", d.binding_level == 1)
+    tr.ok("low SNR → VOID", d.verdict == DetectorVerdict.DETECT_VOID)
+    tr.ok("low SNR: binding=1", d.binding_level == 1)
 
     # 10. Chain attestation boosts binding
     print("\n[10] Chain attestation")
@@ -525,7 +515,7 @@ def _run_tests() -> bool:
         chain_attested=True,
     )
     d = detect_mixing(obs)
-    ok("chain attested: binding=5", d.binding_level == 5)
+    tr.ok("chain attested: binding=5", d.binding_level == 5)
 
     # 11. Reason text
     print("\n[11] Reason text")
@@ -537,7 +527,7 @@ def _run_tests() -> bool:
         snr_db=25.0,
     )
     d = detect_mixing(obs)
-    ok("reason non-empty", len(d.reason) > 10)
+    tr.ok("reason non-empty", len(d.reason) > 10)
 
     # 12. Surface audit — clean
     print("\n[12] Surface audit — clean")
@@ -548,7 +538,7 @@ def _run_tests() -> bool:
                          DetectorVerdict.DETECT_CLEAN, 5, 0.9, ""),
     ]
     audit = audit_detector_surface(decisions)
-    ok("clean surface", audit.surface_verdict == DetectorSurfaceVerdict.SURFACE_CLEAN)
+    tr.ok("clean surface", audit.surface_verdict == DetectorSurfaceVerdict.SURFACE_CLEAN)
 
     # 13. Surface audit — corrupt
     print("\n[13] Surface audit — corrupt")
@@ -557,7 +547,7 @@ def _run_tests() -> bool:
                          DetectorVerdict.DETECT_VOID, 1, 0.85, ""),
     ]
     audit = audit_detector_surface(decisions)
-    ok("void → SURFACE_CORRUPT",
+    tr.ok("void → SURFACE_CORRUPT",
        audit.surface_verdict == DetectorSurfaceVerdict.SURFACE_CORRUPT)
 
     # 14. Marginal verdict for low confidence
@@ -570,7 +560,7 @@ def _run_tests() -> bool:
         snr_db=22.0,
     )
     d = detect_mixing(obs)
-    ok("marginal or moderate", d.verdict in (
+    tr.ok("marginal or moderate", d.verdict in (
         DetectorVerdict.DETECT_MARGINAL, DetectorVerdict.DETECT_MODERATE))
 
     # 15. Dominant signature in audit
@@ -584,15 +574,9 @@ def _run_tests() -> bool:
                          DetectorVerdict.DETECT_MODERATE, 3, 0.65, ""),
     ]
     audit = audit_detector_surface(decisions)
-    ok("dominant=BEAT_FREQUENCY", audit.dominant_signature == MixingSignature.BEAT_FREQUENCY)
+    tr.ok("dominant=BEAT_FREQUENCY", audit.dominant_signature == MixingSignature.BEAT_FREQUENCY)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

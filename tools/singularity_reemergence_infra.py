@@ -44,6 +44,7 @@ import statistics
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -518,49 +519,38 @@ def infinite_signal(signal_id: str = "infinite") -> SingularitySignal:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== singularity_reemergence_infra tests ===\n")
+    tr = TestRunner('singularity_reemergence_infra  —  unit tests')
+    tr.header()
 
     # T1-2: stable → high binding + AFFIRM
     dec = assess_singularity(stable_signal())
-    check("stable: binding ≥ 3", dec.binding_level >= 3)
-    check("stable: AFFIRM or SCRUTINISE",
+    tr.ok("stable: binding ≥ 3", dec.binding_level >= 3)
+    tr.ok("stable: AFFIRM or SCRUTINISE",
           dec.verdict in (SingularityVerdict.SINGULARITY_AFFIRM,
                           SingularityVerdict.SINGULARITY_SCRUTINISE))
 
     # T3-4: transit → binding = 1 + VOID
     dec = assess_singularity(transit_signal())
-    check("transit: binding = 1",     dec.binding_level == 1)
-    check("transit: phase = TRANSIT", dec.phase == SingularityPhase.TRANSIT)
-    check("transit: VOID verdict",    dec.verdict == SingularityVerdict.SINGULARITY_VOID)
+    tr.ok("transit: binding = 1",     dec.binding_level == 1)
+    tr.ok("transit: phase = TRANSIT", dec.phase == SingularityPhase.TRANSIT)
+    tr.ok("transit: VOID verdict",    dec.verdict == SingularityVerdict.SINGULARITY_VOID)
 
     # T5-6: infinite recursion → UNRESOLVABLE + VOID
     dec = assess_singularity(infinite_signal())
-    check("infinite: UNRESOLVABLE", dec.phase == SingularityPhase.UNRESOLVABLE)
-    check("infinite: binding = 1",  dec.binding_level == 1)
-    check("infinite: VOID verdict", dec.verdict == SingularityVerdict.SINGULARITY_VOID)
+    tr.ok("infinite: UNRESOLVABLE", dec.phase == SingularityPhase.UNRESOLVABLE)
+    tr.ok("infinite: binding = 1",  dec.binding_level == 1)
+    tr.ok("infinite: VOID verdict", dec.verdict == SingularityVerdict.SINGULARITY_VOID)
 
     # T7: reemergence → GATHER verdict
     dec = assess_singularity(reemergence_signal())
-    check("reemergence: phase = REEMERGENCE", dec.phase == SingularityPhase.REEMERGENCE)
-    check("reemergence: GATHER verdict",
+    tr.ok("reemergence: phase = REEMERGENCE", dec.phase == SingularityPhase.REEMERGENCE)
+    tr.ok("reemergence: GATHER verdict",
           dec.verdict == SingularityVerdict.SINGULARITY_GATHER)
 
     # T9: binding always in [1, 5]
     for sig in [stable_signal(), transit_signal(), reemergence_signal(), infinite_signal()]:
         dec = assess_singularity(sig)
-        check(f"binding in [1,5] — {sig.signal_id}", 1 <= dec.binding_level <= 5)
+        tr.ok(f"binding in [1,5] — {sig.signal_id}", 1 <= dec.binding_level <= 5)
 
     # T10: ONTOLOGICAL ceiling = 3
     sig = SingularitySignal("onto", SingularityClass.ONTOLOGICAL,
@@ -568,7 +558,7 @@ def _run_tests() -> None:
                             attractor_stability=1.0, transit_duration=1.0,
                             chain_attested=True)
     dec = assess_singularity(sig)
-    check("ONTOLOGICAL: binding ≤ 3", dec.binding_level <= 3)
+    tr.ok("ONTOLOGICAL: binding ≤ 3", dec.binding_level <= 3)
 
     # T11: INFINITE ceiling = 2
     sig = SingularitySignal("inf_stable", SingularityClass.INFINITE,
@@ -576,20 +566,20 @@ def _run_tests() -> None:
                             attractor_stability=1.0, transit_duration=1.0,
                             infinite_recursion_depth=0)
     dec = assess_singularity(sig)
-    check("INFINITE class: binding ≤ 2", dec.binding_level <= 2)
+    tr.ok("INFINITE class: binding ≤ 2", dec.binding_level <= 2)
 
     # T12: depth=0.0 → TRANSIT regardless of coherence
     sig = SingularitySignal("d0", SingularityClass.MATHEMATICAL,
                             depth=0.0, reemergence_coherence=1.0)
     dec = assess_singularity(sig)
-    check("depth=0.0 → TRANSIT", dec.phase == SingularityPhase.TRANSIT)
+    tr.ok("depth=0.0 → TRANSIT", dec.phase == SingularityPhase.TRANSIT)
 
     # T13: depth=0.5 + transit_duration>0 + coherence≥0.5 → REEMERGENCE or STABLE
     sig = SingularitySignal("emerge_mid", SingularityClass.PHYSICAL,
                             depth=0.5, reemergence_coherence=0.6,
                             attractor_stability=0.65, transit_duration=0.5)
     dec = assess_singularity(sig)
-    check("mid reemergence: REEMERGENCE or STABLE",
+    tr.ok("mid reemergence: REEMERGENCE or STABLE",
           dec.phase in (SingularityPhase.REEMERGENCE, SingularityPhase.STABLE))
 
     # T14: symmetry_broken penalises reemergence binding
@@ -603,7 +593,7 @@ def _run_tests() -> None:
                                    symmetry_broken=True)
     dec_i = assess_singularity(sig_intact)
     dec_b = assess_singularity(sig_broken)
-    check("symmetry_broken: binding ≤ intact", dec_b.binding_level <= dec_i.binding_level)
+    tr.ok("symmetry_broken: binding ≤ intact", dec_b.binding_level <= dec_i.binding_level)
 
     # T15: chain_attested bumps stable binding
     sig_no  = SingularitySignal("ca_no",  SingularityClass.TOPOLOGICAL,
@@ -612,52 +602,52 @@ def _run_tests() -> None:
     sig_yes = SingularitySignal("ca_yes", SingularityClass.TOPOLOGICAL,
                                 depth=0.9, reemergence_coherence=0.85,
                                 attractor_stability=0.90, chain_attested=True)
-    check("chain_attested bumps binding",
+    tr.ok("chain_attested bumps binding",
           assess_singularity(sig_yes).binding_level >= assess_singularity(sig_no).binding_level)
 
     # T16: surface audit — all stable → CLEAN or ACTIVE
     decs = [assess_singularity(stable_signal(f"s{i}")) for i in range(5)]
     audit = audit_singularity_surface(decs)
-    check("stable surface → CLEAN or ACTIVE",
+    tr.ok("stable surface → CLEAN or ACTIVE",
           audit.surface_verdict in (SingularitySurface.SINGULARITY_CLEAN,
                                     SingularitySurface.SINGULARITY_ACTIVE))
 
     # T17: surface audit — mostly transit → CASCADING or CATASTROPHIC
     decs = [assess_singularity(transit_signal(f"t{i}")) for i in range(5)]
     audit = audit_singularity_surface(decs)
-    check("transit surface → CASCADING or CATASTROPHIC",
+    tr.ok("transit surface → CASCADING or CATASTROPHIC",
           audit.surface_verdict in (SingularitySurface.SINGULARITY_CASCADING,
                                     SingularitySurface.SINGULARITY_CATASTROPHIC))
 
     # T18-19: empty surface audit
     audit = audit_singularity_surface([])
-    check("empty surface → CLEAN",   audit.surface_verdict == SingularitySurface.SINGULARITY_CLEAN)
-    check("empty surface → total=0", audit.total_signals == 0)
+    tr.ok("empty surface → CLEAN",   audit.surface_verdict == SingularitySurface.SINGULARITY_CLEAN)
+    tr.ok("empty surface → total=0", audit.total_signals == 0)
 
     # T20: phase_counts sums to total_signals
     decs = [assess_singularity(s) for s in
             [stable_signal(), transit_signal(), reemergence_signal()]]
     audit = audit_singularity_surface(decs)
-    check("phase_counts sums to total",
+    tr.ok("phase_counts sums to total",
           sum(audit.phase_counts.values()) == audit.total_signals)
 
     # T21: mean_depth ∈ [0, 1]
-    check("mean_depth ∈ [0,1]", 0.0 <= audit.mean_depth <= 1.0)
+    tr.ok("mean_depth ∈ [0,1]", 0.0 <= audit.mean_depth <= 1.0)
 
     # T22: governance_action non-empty
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
     # T23: recursion_depth = 4 (cap) → UNRESOLVABLE
     sig = SingularitySignal("cap4", SingularityClass.INFINITE,
                             depth=0.8, infinite_recursion_depth=5)
-    check("recursion>cap → UNRESOLVABLE",
+    tr.ok("recursion>cap → UNRESOLVABLE",
           assess_singularity(sig).phase == SingularityPhase.UNRESOLVABLE)
 
     # T24: recursion_depth = 0 → not UNRESOLVABLE
     sig = SingularitySignal("rec0", SingularityClass.INFINITE,
                             depth=0.8, infinite_recursion_depth=0)
-    check("recursion=0 → not UNRESOLVABLE",
+    tr.ok("recursion=0 → not UNRESOLVABLE",
           assess_singularity(sig).phase != SingularityPhase.UNRESOLVABLE)
 
     # T25: approach signal (high approach_rate, depth>transit) → APPROACH phase
@@ -665,15 +655,15 @@ def _run_tests() -> None:
                             depth=0.35, approach_rate=0.75,
                             reemergence_coherence=0.0, transit_duration=0.0)
     dec = assess_singularity(sig)
-    check("high approach_rate → APPROACH",
+    tr.ok("high approach_rate → APPROACH",
           dec.phase in (SingularityPhase.APPROACH, SingularityPhase.TRANSIT))
 
     # T26: summary contains signal_id
     dec = assess_singularity(stable_signal("probe"))
-    check("summary contains signal_id", "probe" in dec.summary)
+    tr.ok("summary contains signal_id", "probe" in dec.summary)
 
     # T27: notes list is non-empty
-    check("notes non-empty", len(dec.notes) > 0)
+    tr.ok("notes non-empty", len(dec.notes) > 0)
 
     # T28: TEMPORAL class: binding ceiling = 3
     sig = SingularitySignal("temporal", SingularityClass.TEMPORAL,
@@ -681,14 +671,10 @@ def _run_tests() -> None:
                             attractor_stability=1.0, transit_duration=1.0,
                             chain_attested=True)
     dec = assess_singularity(sig)
-    check("TEMPORAL class: binding ≤ 3", dec.binding_level <= 3)
+    tr.ok("TEMPORAL class: binding ≤ 3", dec.binding_level <= 3)
 
-    print(f"\n{'=' * 52}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

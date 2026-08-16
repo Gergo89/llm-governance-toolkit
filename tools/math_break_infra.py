@@ -44,6 +44,7 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Dict
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -526,128 +527,117 @@ def audit_math_surface(decisions: List[MathDecision]) -> MathSurfaceAudit:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== math_break_infra tests ===\n")
+    tr = TestRunner('math_break_infra  —  unit tests')
+    tr.header()
 
     # 1. Clean computation → MATH_RELIABLE, binding ≥ 4
     sig = MathSignal(signal_id="clean", result_value=42.0, chain_attested=True)
     dec = detect_math_failure(sig)
-    check("clean: MATH_RELIABLE", dec.verdict == MathVerdict.MATH_RELIABLE)
-    check("clean: binding 5", dec.binding_level == 5)
-    check("clean: no failures", not dec.failures)
+    tr.ok("clean: MATH_RELIABLE", dec.verdict == MathVerdict.MATH_RELIABLE)
+    tr.ok("clean: binding 5", dec.binding_level == 5)
+    tr.ok("clean: no failures", not dec.failures)
 
     # 2. NaN result → NAN_PROPAGATION, binding 2
     sig = MathSignal(signal_id="nan", result_value=float("nan"))
     dec = detect_math_failure(sig)
-    check("nan: NAN_PROPAGATION detected",
+    tr.ok("nan: NAN_PROPAGATION detected",
           any(f.failure_mode == MathFailureMode.NAN_PROPAGATION for f in dec.failures))
-    check("nan: MATH_VOID", dec.verdict == MathVerdict.MATH_VOID)
-    check("nan: binding 2", dec.binding_level == 2)
+    tr.ok("nan: MATH_VOID", dec.verdict == MathVerdict.MATH_VOID)
+    tr.ok("nan: binding 2", dec.binding_level == 2)
 
     # 3. Overflow (Inf result) → FLOATING_POINT_OVERFLOW
     sig = MathSignal(signal_id="overflow", result_value=float("inf"))
     dec = detect_math_failure(sig)
-    check("overflow: FLOATING_POINT_OVERFLOW detected",
+    tr.ok("overflow: FLOATING_POINT_OVERFLOW detected",
           any(f.failure_mode == MathFailureMode.FLOATING_POINT_OVERFLOW for f in dec.failures))
-    check("overflow: MATH_UNRELIABLE", dec.verdict == MathVerdict.MATH_UNRELIABLE)
+    tr.ok("overflow: MATH_UNRELIABLE", dec.verdict == MathVerdict.MATH_UNRELIABLE)
 
     # 4. Division by zero → DIVISION_BY_ZERO, severity 4
     sig = MathSignal(signal_id="div0", denominator_value=0.0)
     dec = detect_math_failure(sig)
-    check("div0: DIVISION_BY_ZERO detected",
+    tr.ok("div0: DIVISION_BY_ZERO detected",
           any(f.failure_mode == MathFailureMode.DIVISION_BY_ZERO for f in dec.failures))
-    check("div0: MATH_UNDEFINED", dec.verdict == MathVerdict.MATH_UNDEFINED)
-    check("div0: binding 1", dec.binding_level == 1)
+    tr.ok("div0: MATH_UNDEFINED", dec.verdict == MathVerdict.MATH_UNDEFINED)
+    tr.ok("div0: binding 1", dec.binding_level == 1)
 
     # 5. Near-zero denominator → DIVISION_BY_ZERO (severity 3)
     sig = MathSignal(signal_id="near0", denominator_value=1e-16)
     dec = detect_math_failure(sig)
-    check("near0: DIVISION_BY_ZERO detected",
+    tr.ok("near0: DIVISION_BY_ZERO detected",
           any(f.failure_mode == MathFailureMode.DIVISION_BY_ZERO for f in dec.failures))
 
     # 6. Catastrophic cancellation
     sig = MathSignal(signal_id="cancel", relative_precision_lost=0.60)  # 60% = ~9.6 digits
     dec = detect_math_failure(sig)
-    check("cancellation: CATASTROPHIC_CANCELLATION detected",
+    tr.ok("cancellation: CATASTROPHIC_CANCELLATION detected",
           any(f.failure_mode == MathFailureMode.CATASTROPHIC_CANCELLATION for f in dec.failures))
 
     # 7. No catastrophic cancellation when precision_lost is small
     sig = MathSignal(signal_id="ok_precision", relative_precision_lost=0.05)
     dec = detect_math_failure(sig)
-    check("ok precision: no cancellation",
+    tr.ok("ok precision: no cancellation",
           not any(f.failure_mode == MathFailureMode.CATASTROPHIC_CANCELLATION for f in dec.failures))
 
     # 8. Ill-conditioned system (κ = 1e13)
     sig = MathSignal(signal_id="ill_cond", condition_number=1e13)
     dec = detect_math_failure(sig)
-    check("ill cond: ILL_CONDITIONED detected",
+    tr.ok("ill cond: ILL_CONDITIONED detected",
           any(f.failure_mode == MathFailureMode.ILL_CONDITIONED_SYSTEM for f in dec.failures))
 
     # 9. Well-conditioned system (κ = 10) → no failure
     sig = MathSignal(signal_id="well_cond", condition_number=10.0)
     dec = detect_math_failure(sig)
-    check("well cond: no ill-conditioning",
+    tr.ok("well cond: no ill-conditioning",
           not any(f.failure_mode == MathFailureMode.ILL_CONDITIONED_SYSTEM for f in dec.failures))
 
     # 10. Non-convergence (residual = 0.5)
     sig = MathSignal(signal_id="nonconv", convergence_residual=0.5)
     dec = detect_math_failure(sig)
-    check("non-convergence: NON_CONVERGENCE detected",
+    tr.ok("non-convergence: NON_CONVERGENCE detected",
           any(f.failure_mode == MathFailureMode.NON_CONVERGENCE for f in dec.failures))
-    check("non-convergence: MATH_VOID", dec.verdict == MathVerdict.MATH_VOID)
+    tr.ok("non-convergence: MATH_VOID", dec.verdict == MathVerdict.MATH_VOID)
 
     # 11. Numeric instability (amplification 1.15)
     sig = MathSignal(signal_id="unstable", amplification_factor=1.15)
     dec = detect_math_failure(sig)
-    check("unstable: NUMERIC_INSTABILITY detected",
+    tr.ok("unstable: NUMERIC_INSTABILITY detected",
           any(f.failure_mode == MathFailureMode.NUMERIC_INSTABILITY for f in dec.failures))
 
     # 12. Integer overflow
     sig = MathSignal(signal_id="int_overflow", integer_overflow_detected=True)
     dec = detect_math_failure(sig)
-    check("int overflow: MODULAR_OVERFLOW detected",
+    tr.ok("int overflow: MODULAR_OVERFLOW detected",
           any(f.failure_mode == MathFailureMode.MODULAR_OVERFLOW for f in dec.failures))
 
     # 13. Domain violation
     sig = MathSignal(signal_id="domain", domain_violation=True)
     dec = detect_math_failure(sig)
-    check("domain: UNDEFINED_OPERATION detected",
+    tr.ok("domain: UNDEFINED_OPERATION detected",
           any(f.failure_mode == MathFailureMode.UNDEFINED_OPERATION for f in dec.failures))
-    check("domain: MATH_UNDEFINED", dec.verdict == MathVerdict.MATH_UNDEFINED)
+    tr.ok("domain: MATH_UNDEFINED", dec.verdict == MathVerdict.MATH_UNDEFINED)
 
     # 14. Degenerate geometry
     sig = MathSignal(signal_id="degen_geo", geometry_degenerate=True)
     dec = detect_math_failure(sig)
-    check("degenerate geo: DEGENERATE_GEOMETRY detected",
+    tr.ok("degenerate geo: DEGENERATE_GEOMETRY detected",
           any(f.failure_mode == MathFailureMode.DEGENERATE_GEOMETRY for f in dec.failures))
 
     # 15. Surface audit: all clean → CLEAN
     decisions = [detect_math_failure(MathSignal(f"c{i}", result_value=float(i))) for i in range(5)]
     audit = audit_math_surface(decisions)
-    check("surface clean: MATH_SURFACE_CLEAN",
+    tr.ok("surface clean: MATH_SURFACE_CLEAN",
           audit.surface_verdict == MathSurfaceVerdict.MATH_SURFACE_CLEAN)
 
     # 16. Surface audit: all broken → BROKEN
     decisions = [detect_math_failure(MathSignal(f"b{i}", result_value=float("nan"))) for i in range(5)]
     audit = audit_math_surface(decisions)
-    check("surface broken: MATH_SURFACE_BROKEN",
+    tr.ok("surface broken: MATH_SURFACE_BROKEN",
           audit.surface_verdict == MathSurfaceVerdict.MATH_SURFACE_BROKEN)
 
     # 17. Empty surface audit
     audit = audit_math_surface([])
-    check("empty: MATH_SURFACE_CLEAN", audit.surface_verdict == MathSurfaceVerdict.MATH_SURFACE_CLEAN)
-    check("empty: total=0", audit.total_computations == 0)
+    tr.ok("empty: MATH_SURFACE_CLEAN", audit.surface_verdict == MathSurfaceVerdict.MATH_SURFACE_CLEAN)
+    tr.ok("empty: total=0", audit.total_computations == 0)
 
     # 18. Binding in [1, 5] for all cases
     test_sigs = [
@@ -659,11 +649,11 @@ def _run_tests() -> None:
     ]
     for sig in test_sigs:
         d = detect_math_failure(sig)
-        check(f"binding in [1,5] for {sig.signal_id}", 1 <= d.binding_level <= 5)
+        tr.ok(f"binding in [1,5] for {sig.signal_id}", 1 <= d.binding_level <= 5)
 
     # 19. Summary non-empty
     dec = detect_math_failure(MathSignal("summary_test", result_value=1.0))
-    check("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
+    tr.ok("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
 
     # 20. Remediation present for all failures
     for failure_mode in MathFailureMode:
@@ -688,15 +678,11 @@ def _run_tests() -> None:
         dec_t = detect_math_failure(sig_t)
         matched = [f for f in dec_t.failures if f.failure_mode == failure_mode]
         if matched:
-            check(f"remediation for {failure_mode.value}",
+            tr.ok(f"remediation for {failure_mode.value}",
                   isinstance(matched[0].remediation, str) and len(matched[0].remediation) > 0)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

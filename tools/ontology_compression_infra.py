@@ -49,6 +49,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -176,18 +177,6 @@ _FIELD_INF_THRESH   = 0.30
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _safe_float(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
-def _clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
-
 def _compression_ratio(description_length: int,
                         minimum_description_length: int) -> float:
     """MDL / description_length; capped at 1.2 (modest hyper-compression allowed)."""
@@ -206,24 +195,24 @@ def _class_from_ratio(ratio: float) -> CompressionClass:
 
 def _normalise_score(ratio: float) -> float:
     """Map ratio [0, 1.2] → compression_score [0, 1]."""
-    return _clamp01(ratio / 1.2)
+    return _c01(ratio / 1.2)
 
 
 def _abstraction_bonus(depth: int) -> float:
     """Higher abstraction depth → more compressed in conceptual space."""
     d = max(0, depth)
-    return _clamp01(math.log1p(d) / math.log1p(_ABS_DEPTH_SAT)) * 0.4
+    return _c01(math.log1p(d) / math.log1p(_ABS_DEPTH_SAT)) * 0.4
 
 
 def _cycle_bonus(cycle_count: int) -> float:
     """Each compression cycle adds a diminishing bonus (like spiral depth)."""
     c = max(0, cycle_count)
-    return _clamp01(math.log1p(c) / math.log1p(10)) * 0.3
+    return _c01(math.log1p(c) / math.log1p(10)) * 0.3
 
 
 def _inflation_penalty(inflation_rate: float) -> float:
     """Ongoing inflation degrades binding."""
-    ir = _clamp01(_safe_float(inflation_rate, 0.05))
+    ir = _c01(_sf(inflation_rate, 0.05))
     return ir * 1.5  # max penalty = 1.5
 
 
@@ -257,8 +246,8 @@ def assess_compression(signal: CompressionSignal) -> CompressionDecision:
                 if isinstance(signal.description_length, int) else 10)
     mdl   = max(1, int(signal.minimum_description_length)
                 if isinstance(signal.minimum_description_length, int) else 5)
-    ent   = _clamp01(_safe_float(signal.entropy_of_claim, 0.30))
-    ir    = _clamp01(_safe_float(signal.inflation_rate, 0.05))
+    ent   = _c01(_sf(signal.entropy_of_claim, 0.30))
+    ir    = _c01(_sf(signal.inflation_rate, 0.05))
     depth = max(0, int(signal.abstraction_depth)
                 if isinstance(signal.abstraction_depth, int) else 1)
     cycles = max(0, int(signal.cycle_count)
@@ -321,7 +310,7 @@ def assess_compression(signal: CompressionSignal) -> CompressionDecision:
     # Use min(1.0, ratio) directly — a perfect 1:1 compression scores 1.0;
     # hyper-compressed (ratio > 1.0) is capped at 1.0 (can't be "more than young").
     # Using the normalised score (ratio/1.2) would incorrectly cap at 0.83 for perfect compression.
-    rj_index = _clamp01(min(1.0, ratio) * (1.0 - ent) * (1.0 - ir))
+    rj_index = _c01(min(1.0, ratio) * (1.0 - ent) * (1.0 - ir))
 
     # ── Verdict ───────────────────────────────────────────────────────────────
     if comp_class in (CompressionClass.HIGH_INFLATION,
@@ -525,73 +514,60 @@ def maximally_inflated(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
 
-    passed = 0
-    failed = 0
 
-    def ok(label: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("ontology_compression_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('ontology_compression_infra  —  unit tests')
+    tr.header()
 
     # ── Builder signals ──────────────────────────────────────────────────────
-    print("\n--- builder signals ---")
+    tr.section("builder signals")
     d_max  = assess_compression(maximally_compressed("max", "E=mc²"))
     d_high = assess_compression(highly_compressed("hi",  "F=ma"))
     d_neut = assess_compression(neutral_signal("neut",  "moderate claim"))
     d_inf  = assess_compression(inflated_signal("inf",  "over-hedged claim"))
     d_minf = assess_compression(maximally_inflated("minf", "paradox"))
 
-    ok("max compressed: binding=5",        d_max.binding == 5)
-    ok("max compressed: ANCHOR",           d_max.verdict == CompressionVerdict.ANCHOR)
-    ok("max compressed: class=MAXIMUM",
+    tr.ok("max compressed: binding=5",        d_max.binding == 5)
+    tr.ok("max compressed: ANCHOR",           d_max.verdict == CompressionVerdict.ANCHOR)
+    tr.ok("max compressed: class=MAXIMUM",
        d_max.compression_class == CompressionClass.MAXIMUM_COMPRESSION)
 
-    ok("highly compressed: binding=4",     d_high.binding == 4)
-    ok("highly compressed: AFFIRM",        d_high.verdict == CompressionVerdict.AFFIRM)
+    tr.ok("highly compressed: binding=4",     d_high.binding == 4)
+    tr.ok("highly compressed: AFFIRM",        d_high.verdict == CompressionVerdict.AFFIRM)
 
-    ok("neutral: binding in [2,3]",        2 <= d_neut.binding <= 3)
-    ok("neutral: HOLD or SCRUTINISE",
+    tr.ok("neutral: binding in [2,3]",        2 <= d_neut.binding <= 3)
+    tr.ok("neutral: HOLD or SCRUTINISE",
        d_neut.verdict in (CompressionVerdict.HOLD, CompressionVerdict.SCRUTINISE))
 
-    ok("inflated: binding ≤ 2",            d_inf.binding <= 2)
-    ok("inflated: SCRUTINISE or VOID",
+    tr.ok("inflated: binding ≤ 2",            d_inf.binding <= 2)
+    tr.ok("inflated: SCRUTINISE or VOID",
        d_inf.verdict in (CompressionVerdict.SCRUTINISE, CompressionVerdict.VOID))
 
-    ok("max inflated: binding=1",          d_minf.binding == 1)
-    ok("max inflated: VOID",               d_minf.verdict == CompressionVerdict.VOID)
+    tr.ok("max inflated: binding=1",          d_minf.binding == 1)
+    tr.ok("max inflated: VOID",               d_minf.verdict == CompressionVerdict.VOID)
 
     # ── Ordering invariant ────────────────────────────────────────────────────
-    print("\n--- ordering invariant ---")
-    ok("max > high > neutral",             d_max.binding >= d_high.binding >= d_neut.binding)
-    ok("neutral > inflated",               d_neut.binding >= d_inf.binding)
-    ok("inflated > max_inflated",          d_inf.binding >= d_minf.binding)
+    tr.section("ordering invariant")
+    tr.ok("max > high > neutral",             d_max.binding >= d_high.binding >= d_neut.binding)
+    tr.ok("neutral > inflated",               d_neut.binding >= d_inf.binding)
+    tr.ok("inflated > max_inflated",          d_inf.binding >= d_minf.binding)
 
     # ── Compression ratio ─────────────────────────────────────────────────────
-    print("\n--- compression ratio ---")
-    ok("max compressed ratio ≈ 1.0",       d_max.compression_ratio >= 0.90)
-    ok("max inflated ratio close to 0",    d_minf.compression_ratio < 0.05)
+    tr.section("compression ratio")
+    tr.ok("max compressed ratio ≈ 1.0",       d_max.compression_ratio >= 0.90)
+    tr.ok("max inflated ratio close to 0",    d_minf.compression_ratio < 0.05)
 
     # Manual ratio test
     sig_ratio = CompressionSignal(
         claim_id="r", description_length=20, minimum_description_length=18,
     )
     d_r = assess_compression(sig_ratio)
-    ok("MDL=18 / len=20 → ratio=0.9 → MAXIMUM or HIGH",
+    tr.ok("MDL=18 / len=20 → ratio=0.9 → MAXIMUM or HIGH",
        d_r.compression_class in (CompressionClass.MAXIMUM_COMPRESSION,
                                    CompressionClass.HIGH_COMPRESSION))
 
     # ── Abstraction depth bonus ───────────────────────────────────────────────
-    print("\n--- abstraction depth ---")
+    tr.section("abstraction depth")
     low_abs = assess_compression(CompressionSignal(
         claim_id="low_abs", description_length=10, minimum_description_length=7,
         abstraction_depth=0, cycle_count=0, inflation_rate=0.05,
@@ -600,10 +576,10 @@ def _run_tests() -> None:
         claim_id="high_abs", description_length=10, minimum_description_length=7,
         abstraction_depth=8, cycle_count=0, inflation_rate=0.05,
     ))
-    ok("high abstraction → binding ≥ low", high_abs.binding >= low_abs.binding)
+    tr.ok("high abstraction → binding ≥ low", high_abs.binding >= low_abs.binding)
 
     # ── Compression cycles (spiral) ───────────────────────────────────────────
-    print("\n--- compression cycles (spiral) ---")
+    tr.section("compression cycles (spiral)")
     no_cycles = assess_compression(CompressionSignal(
         claim_id="nc", description_length=10, minimum_description_length=7,
         abstraction_depth=2, cycle_count=0, inflation_rate=0.05,
@@ -612,29 +588,29 @@ def _run_tests() -> None:
         claim_id="mc", description_length=10, minimum_description_length=7,
         abstraction_depth=2, cycle_count=8, inflation_rate=0.02,
     ))
-    ok("many cycles → binding ≥ no cycles",
+    tr.ok("many cycles → binding ≥ no cycles",
        many_cycles.binding >= no_cycles.binding)
-    ok("many cycles + low inflation → COMPRESSING",
+    tr.ok("many cycles + low inflation → COMPRESSING",
        many_cycles.trend == CompressionTrend.COMPRESSING)
 
     # ── Rejuvenation index (tömörítés = fiatalítás) ───────────────────────────
-    print("\n--- rejuvenation index (tömörítés = fiatalítás) ---")
-    ok("max compressed: rejuvenation ≥ 0.80",  d_max.rejuvenation_index >= 0.80)
-    ok("max inflated: rejuvenation ≈ 0",       d_minf.rejuvenation_index < 0.05)
-    ok("compressed rejuvenation > inflated",
+    tr.section("rejuvenation index (tömörítés = fiatalítás)")
+    tr.ok("max compressed: rejuvenation ≥ 0.80",  d_max.rejuvenation_index >= 0.80)
+    tr.ok("max inflated: rejuvenation ≈ 0",       d_minf.rejuvenation_index < 0.05)
+    tr.ok("compressed rejuvenation > inflated",
        d_max.rejuvenation_index > d_inf.rejuvenation_index)
 
     # ── Inflation trend detection ─────────────────────────────────────────────
-    print("\n--- inflation trend ---")
+    tr.section("inflation trend")
     inflating = assess_compression(CompressionSignal(
         claim_id="inf_t", description_length=10, minimum_description_length=7,
         inflation_rate=0.50, cycle_count=0,
     ))
-    ok("high inflation_rate → INFLATING trend",
+    tr.ok("high inflation_rate → INFLATING trend",
        inflating.trend == CompressionTrend.INFLATING)
 
     # ── Universality bonus ────────────────────────────────────────────────────
-    print("\n--- universality ---")
+    tr.section("universality")
     non_univ = assess_compression(CompressionSignal(
         claim_id="nu", description_length=6, minimum_description_length=5,
         is_universal=False, abstraction_depth=3, cycle_count=0, inflation_rate=0.05,
@@ -643,28 +619,28 @@ def _run_tests() -> None:
         claim_id="u", description_length=6, minimum_description_length=5,
         is_universal=True, abstraction_depth=3, cycle_count=0, inflation_rate=0.05,
     ))
-    ok("universal → binding ≥ non-universal", univ.binding >= non_univ.binding)
+    tr.ok("universal → binding ≥ non-universal", univ.binding >= non_univ.binding)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_compression_field([])
-    ok("empty → STABLE",           fa_empty.field_verdict == "STABLE")
-    ok("empty → binding=5.0",      fa_empty.mean_binding  == 5.0)
+    tr.ok("empty → STABLE",           fa_empty.field_verdict == "STABLE")
+    tr.ok("empty → binding=5.0",      fa_empty.mean_binding  == 5.0)
 
     compressed_ds = [assess_compression(maximally_compressed(f"MC{i}"))
                      for i in range(5)]
     fa_comp = audit_compression_field(compressed_ds)
-    ok("all max compressed → REJUVENATING",
+    tr.ok("all max compressed → REJUVENATING",
        fa_comp.field_verdict == "REJUVENATING")
 
     inflated_ds = [assess_compression(maximally_inflated(f"MI{i}")) for i in range(4)]
     neutral_ds  = [assess_compression(neutral_signal(f"NT{i}")) for i in range(4)]
     fa_inf = audit_compression_field(inflated_ds + neutral_ds)
-    ok("50% max inflated → COLLAPSED or INFLATING",
+    tr.ok("50% max inflated → COLLAPSED or INFLATING",
        fa_inf.field_verdict in ("COLLAPSED", "INFLATING"))
 
     # ── Sentinel & edge cases ─────────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     nan_sig = CompressionSignal(
         claim_id="nan", description_length=float("nan"),  # type: ignore[arg-type]
@@ -672,14 +648,14 @@ def _run_tests() -> None:
         entropy_of_claim=float("nan"), inflation_rate=float("inf"),
     )
     d_nan = assess_compression(nan_sig)
-    ok("NaN/Inf inputs → valid binding", 1 <= d_nan.binding <= 5)
+    tr.ok("NaN/Inf inputs → valid binding", 1 <= d_nan.binding <= 5)
 
     zero_sig = CompressionSignal(
         claim_id="zero", description_length=0,
         minimum_description_length=0,
     )
     d_zero = assess_compression(zero_sig)
-    ok("zero lengths → valid binding",   1 <= d_zero.binding <= 5)
+    tr.ok("zero lengths → valid binding",   1 <= d_zero.binding <= 5)
 
     neg_sig = CompressionSignal(
         claim_id="neg", description_length=-5,
@@ -687,14 +663,14 @@ def _run_tests() -> None:
         abstraction_depth=-3, cycle_count=-5,
     )
     d_neg = assess_compression(neg_sig)
-    ok("negative inputs → valid binding", 1 <= d_neg.binding <= 5)
+    tr.ok("negative inputs → valid binding", 1 <= d_neg.binding <= 5)
 
     idem = maximally_compressed("idem")
-    ok("idempotency",
+    tr.ok("idempotency",
        assess_compression(idem).binding == assess_compression(idem).binding)
 
     # ── Language as singularity (A nyelv szingularitás?) ─────────────────────
-    print("\n--- A nyelv szingularitás? ---")
+    tr.section("A nyelv szingularitás?")
     # Language = highly abstracted, universal, heavily cycled compression
     language_sig = CompressionSignal(
         claim_id="language",
@@ -709,20 +685,13 @@ def _run_tests() -> None:
         chain_attested=True,
     )
     d_lang = assess_compression(language_sig)
-    ok("language: binding=5",             d_lang.binding == 5)
-    ok("language: ANCHOR",                d_lang.verdict == CompressionVerdict.ANCHOR)
-    ok("language: rejuvenation ≥ 0.85",  d_lang.rejuvenation_index >= 0.85)
-    ok("language: COMPRESSING trend",     d_lang.trend == CompressionTrend.COMPRESSING)
+    tr.ok("language: binding=5",             d_lang.binding == 5)
+    tr.ok("language: ANCHOR",                d_lang.verdict == CompressionVerdict.ANCHOR)
+    tr.ok("language: rejuvenation ≥ 0.85",  d_lang.rejuvenation_index >= 0.85)
+    tr.ok("language: COMPRESSING trend",     d_lang.trend == CompressionTrend.COMPRESSING)
 
     # Summary
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

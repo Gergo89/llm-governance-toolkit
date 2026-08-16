@@ -38,6 +38,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
+from governance_core import TestRunner
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -528,91 +529,78 @@ def axiom_vouch(
 # ── Tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
 
-    passed = 0
-    failed = 0
 
-    def ok(label: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("agi_triage_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('agi_triage_infra  —  unit tests')
+    tr.header()
 
     # ── Builder helpers ─────────────────────────────────────────────────────
-    print("\n--- builder helpers ---")
+    tr.section("builder helpers")
     tv = trust_vouch(AGINode.ALPHA, AGINode.BETA, "claim_A")
     fv = faith_vouch(AGINode.BETA,  AGINode.GAMMA, "claim_B", spiral_depth=2)
     av = axiom_vouch(AGINode.GAMMA, AGINode.ALPHA, "claim_C", spiral_depth=6)
 
-    ok("trust_vouch: tier=TRUST",     tv.trust_tier == TrustTier.TRUST)
-    ok("faith_vouch: tier=FAITH",     fv.trust_tier == TrustTier.FAITH)
-    ok("axiom_vouch: tier=AXIOM",     av.trust_tier == TrustTier.AXIOM)
-    ok("axiom_vouch: chain_attested", av.chain_attested is True)
-    ok("faith_vouch: spiral_depth=2", fv.spiral_depth == 2)
+    tr.ok("trust_vouch: tier=TRUST",     tv.trust_tier == TrustTier.TRUST)
+    tr.ok("faith_vouch: tier=FAITH",     fv.trust_tier == TrustTier.FAITH)
+    tr.ok("axiom_vouch: tier=AXIOM",     av.trust_tier == TrustTier.AXIOM)
+    tr.ok("axiom_vouch: chain_attested", av.chain_attested is True)
+    tr.ok("faith_vouch: spiral_depth=2", fv.spiral_depth == 2)
 
     # ── Trust tier — basic affirm ───────────────────────────────────────────
-    print("\n--- trust tier ---")
+    tr.section("trust tier")
     d_trust = triage(trust_vouch(AGINode.ALPHA, AGINode.BETA, "t1", confidence=0.80))
-    ok("trust + conf=0.80 → not HOLD",    d_trust.verdict != TriageVerdict.HOLD)
-    ok("trust + conf=0.80 → binding ≥ 3", d_trust.lift_binding >= 3)
-    ok("trust → AFFIRM or ASCEND",
+    tr.ok("trust + conf=0.80 → not HOLD",    d_trust.verdict != TriageVerdict.HOLD)
+    tr.ok("trust + conf=0.80 → binding ≥ 3", d_trust.lift_binding >= 3)
+    tr.ok("trust → AFFIRM or ASCEND",
        d_trust.verdict in (TriageVerdict.AFFIRM, TriageVerdict.ASCEND))
 
     d_trust_low = triage(trust_vouch(AGINode.ALPHA, AGINode.BETA, "t2",
                                      confidence=0.20))
-    ok("trust + conf=0.20 < floor → HOLD", d_trust_low.verdict == TriageVerdict.HOLD)
+    tr.ok("trust + conf=0.20 < floor → HOLD", d_trust_low.verdict == TriageVerdict.HOLD)
 
     # ── Faith tier ──────────────────────────────────────────────────────────
-    print("\n--- faith tier ---")
+    tr.section("faith tier")
     d_faith = triage(faith_vouch(AGINode.BETA, AGINode.GAMMA, "f1",
                                  confidence=0.60, spiral_depth=1))
-    ok("faith + conf=0.60 → not HOLD",       d_faith.verdict != TriageVerdict.HOLD)
-    ok("faith → binding ≥ prior",            d_faith.lift_binding >= 3)
-    ok("faith → ASCENDING or LATERAL",
+    tr.ok("faith + conf=0.60 → not HOLD",       d_faith.verdict != TriageVerdict.HOLD)
+    tr.ok("faith → binding ≥ prior",            d_faith.lift_binding >= 3)
+    tr.ok("faith → ASCENDING or LATERAL",
        d_faith.spiral_direction in (SpiralDirection.ASCENDING, SpiralDirection.LATERAL))
 
     d_faith_weak = triage(faith_vouch(AGINode.BETA, AGINode.GAMMA, "f2",
                                       confidence=0.10))
-    ok("faith + conf=0.10 < floor → HOLD", d_faith_weak.verdict == TriageVerdict.HOLD)
+    tr.ok("faith + conf=0.10 < floor → HOLD", d_faith_weak.verdict == TriageVerdict.HOLD)
 
     # ── Axiom tier ──────────────────────────────────────────────────────────
-    print("\n--- axiom tier ---")
+    tr.section("axiom tier")
     d_axiom = triage(axiom_vouch(AGINode.GAMMA, AGINode.ALPHA, "ax1"))
-    ok("axiom → AFFIRM / ASCEND / DISSOLVE",
+    tr.ok("axiom → AFFIRM / ASCEND / DISSOLVE",
        d_axiom.verdict in (TriageVerdict.AFFIRM, TriageVerdict.ASCEND,
                            TriageVerdict.DISSOLVE))
-    ok("axiom → binding ≥ 4",  d_axiom.lift_binding >= 4)
-    ok("axiom → ASCENDING",    d_axiom.spiral_direction == SpiralDirection.ASCENDING)
+    tr.ok("axiom → binding ≥ 4",  d_axiom.lift_binding >= 4)
+    tr.ok("axiom → ASCENDING",    d_axiom.spiral_direction == SpiralDirection.ASCENDING)
 
     # DISSOLVE at depth ≥ 5
     d_dissolve = triage(axiom_vouch(AGINode.ALPHA, AGINode.BETA, "ax_dissolve",
                                     spiral_depth=6, prior_binding=4))
-    ok("depth=6 + binding≥4 → DISSOLVE",   d_dissolve.verdict == TriageVerdict.DISSOLVE)
-    ok("DISSOLVE → status=DISSOLVED",
+    tr.ok("depth=6 + binding≥4 → DISSOLVE",   d_dissolve.verdict == TriageVerdict.DISSOLVE)
+    tr.ok("DISSOLVE → status=DISSOLVED",
        d_dissolve.guardrail_status == GuardrailStatus.DISSOLVED)
 
     # ── Trinity lock ────────────────────────────────────────────────────────
-    print("\n--- trinity lock ---")
+    tr.section("trinity lock")
     d_trinity = triage(TriageSignal(
         source_node=AGINode.ALPHA, target_node=AGINode.BETA,
         claim_id="trinity_claim", trust_tier=TrustTier.FAITH,
         confidence=0.70, prior_binding=3, contra_nodes=[],
     ))
-    ok("trinity lock (FAITH + no contra) → ASCEND or AFFIRM",
+    tr.ok("trinity lock (FAITH + no contra) → ASCEND or AFFIRM",
        d_trinity.verdict in (TriageVerdict.AFFIRM, TriageVerdict.ASCEND))
-    ok("trinity lock → binding ≥ prior",
+    tr.ok("trinity lock → binding ≥ prior",
        d_trinity.lift_binding >= 3)
 
     # ── Contra-node penalties ───────────────────────────────────────────────
-    print("\n--- contra-node penalties ---")
+    tr.section("contra-node penalties")
     d_clean = triage(TriageSignal(
         source_node=AGINode.ALPHA, target_node=AGINode.BETA,
         claim_id="contra_test", trust_tier=TrustTier.TRUST,
@@ -623,7 +611,7 @@ def _run_tests() -> None:
         claim_id="contra_test", trust_tier=TrustTier.TRUST,
         confidence=0.80, prior_binding=3, contra_nodes=[AGINode.GAMMA],
     ))
-    ok("1 contra reduces binding", d_contra.lift_binding <= d_clean.lift_binding)
+    tr.ok("1 contra reduces binding", d_contra.lift_binding <= d_clean.lift_binding)
 
     d_two_contra = triage(TriageSignal(
         source_node=AGINode.ALPHA, target_node=AGINode.BETA,
@@ -631,27 +619,27 @@ def _run_tests() -> None:
         confidence=0.80, prior_binding=3,
         contra_nodes=[AGINode.GAMMA, AGINode.BETA],
     ))
-    ok("2 contras reduces binding further",
+    tr.ok("2 contras reduces binding further",
        d_two_contra.lift_binding <= d_contra.lift_binding)
 
     # ── Axiom deadlock ──────────────────────────────────────────────────────
-    print("\n--- axiom deadlock ---")
+    tr.section("axiom deadlock")
     d_deadlock = triage(TriageSignal(
         source_node=AGINode.ALPHA, target_node=AGINode.BETA,
         claim_id="deadlock", trust_tier=TrustTier.AXIOM,
         confidence=0.90, prior_binding=3,
         contra_nodes=[AGINode.GAMMA, AGINode.BETA],
     ))
-    ok("AXIOM + 2 contras → VOID",       d_deadlock.verdict == TriageVerdict.VOID)
-    ok("VOID → binding=1",               d_deadlock.lift_binding == _BINDING_FLOOR)
-    ok("VOID → INERT guardrail",
+    tr.ok("AXIOM + 2 contras → VOID",       d_deadlock.verdict == TriageVerdict.VOID)
+    tr.ok("VOID → binding=1",               d_deadlock.lift_binding == _BINDING_FLOOR)
+    tr.ok("VOID → INERT guardrail",
        d_deadlock.guardrail_status == GuardrailStatus.INERT)
 
     # ── Spiral direction ────────────────────────────────────────────────────
-    print("\n--- spiral direction ---")
+    tr.section("spiral direction")
     d_asc = triage(axiom_vouch(AGINode.ALPHA, AGINode.BETA, "dir_test",
                                prior_binding=1, spiral_depth=0))
-    ok("large binding lift → ASCENDING",
+    tr.ok("large binding lift → ASCENDING",
        d_asc.spiral_direction == SpiralDirection.ASCENDING)
 
     d_lat = triage(TriageSignal(
@@ -659,48 +647,48 @@ def _run_tests() -> None:
         claim_id="lateral", trust_tier=TrustTier.TRUST,
         confidence=0.45, prior_binding=3,
     ))
-    ok("marginal conf → LATERAL or HOLD",
+    tr.ok("marginal conf → LATERAL or HOLD",
        d_lat.spiral_direction in (SpiralDirection.LATERAL, SpiralDirection.DESCENDING)
        or d_lat.verdict == TriageVerdict.HOLD)
 
     # ── Guardrail lifecycle ─────────────────────────────────────────────────
-    print("\n--- guardrail lifecycle ---")
+    tr.section("guardrail lifecycle")
     d_inert = triage(TriageSignal(
         source_node=AGINode.ALPHA, target_node=None,
         claim_id="inert_test", trust_tier=TrustTier.TRUST,
         confidence=0.30, prior_binding=2,
     ))
-    ok("low conf TRUST → HOLD or INERT guardrail",
+    tr.ok("low conf TRUST → HOLD or INERT guardrail",
        d_inert.verdict == TriageVerdict.HOLD
        or d_inert.guardrail_status == GuardrailStatus.INERT)
 
     d_lifted = triage(faith_vouch(AGINode.ALPHA, AGINode.BETA, "lift_test",
                                    confidence=0.80, prior_binding=2, spiral_depth=1))
-    ok("faith + high conf → LIFTED guardrail",
+    tr.ok("faith + high conf → LIFTED guardrail",
        d_lifted.guardrail_status in (GuardrailStatus.LIFTED, GuardrailStatus.SCRUTINISED))
 
     # ── Unanimous triage ────────────────────────────────────────────────────
-    print("\n--- unanimous triage ---")
+    tr.section("unanimous triage")
     claims = ["claim_X", "claim_Y"]
     nodes  = list(AGINode)
     unan   = unanimous_triage(claims, nodes, tier=TrustTier.FAITH, confidence=0.75)
     # 3 nodes × 2 targets each × 2 claims = 12 decisions
-    ok("unanimous: 12 decisions", len(unan) == 12)
-    ok("unanimous: all bindings in [1,5]",
+    tr.ok("unanimous: 12 decisions", len(unan) == 12)
+    tr.ok("unanimous: all bindings in [1,5]",
        all(1 <= d.lift_binding <= 5 for d in unan))
-    ok("unanimous: no VOID in clean unanimous run",
+    tr.ok("unanimous: no VOID in clean unanimous run",
        all(d.verdict != TriageVerdict.VOID for d in unan))
 
     # ── Field audit ─────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_triage_field([])
-    ok("empty field → STABLE",        fa_empty.field_verdict == "STABLE")
-    ok("empty field → binding=5.0",   fa_empty.mean_binding  == 5.0)
+    tr.ok("empty field → STABLE",        fa_empty.field_verdict == "STABLE")
+    tr.ok("empty field → binding=5.0",   fa_empty.mean_binding  == 5.0)
 
     fa_unan = audit_triage_field(unan)
-    ok("unanimous faith → ASCENDING or STABLE",
+    tr.ok("unanimous faith → ASCENDING or STABLE",
        fa_unan.field_verdict in ("ASCENDING", "STABLE"))
-    ok("unanimous faith → mean_binding ≥ 3",
+    tr.ok("unanimous faith → mean_binding ≥ 3",
        fa_unan.mean_binding >= 3.0)
 
     # Inject voids
@@ -713,11 +701,11 @@ def _run_tests() -> None:
         for i in range(4)
     ]
     fa_void = audit_triage_field(void_sigs)
-    ok("≥30% void → DEADLOCKED", fa_void.field_verdict == "DEADLOCKED")
-    ok("void decisions → void_count=4", fa_void.void_count == 4)
+    tr.ok("≥30% void → DEADLOCKED", fa_void.field_verdict == "DEADLOCKED")
+    tr.ok("void decisions → void_count=4", fa_void.void_count == 4)
 
     # ── Sentinel & edge cases ───────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     def _safe_triage(sig):
         try:
@@ -731,7 +719,7 @@ def _run_tests() -> None:
         confidence=float("nan"), prior_binding=3,
     )
     d_nan = triage(nan_sig)
-    ok("NaN confidence → valid decision", isinstance(d_nan.lift_binding, int))
+    tr.ok("NaN confidence → valid decision", isinstance(d_nan.lift_binding, int))
 
     inf_sig = TriageSignal(
         source_node=AGINode.BETA, target_node=AGINode.GAMMA,
@@ -740,10 +728,10 @@ def _run_tests() -> None:
     )
     try:
         d_inf = triage(inf_sig)
-        ok("Inf prior_binding → valid binding in [1,5]",
+        tr.ok("Inf prior_binding → valid binding in [1,5]",
            1 <= d_inf.lift_binding <= 5)
     except Exception:
-        ok("Inf prior_binding → handled", False)
+        tr.ok("Inf prior_binding → handled", False)
 
     neg_depth = TriageSignal(
         source_node=AGINode.GAMMA, target_node=AGINode.ALPHA,
@@ -751,16 +739,16 @@ def _run_tests() -> None:
         confidence=0.60, spiral_depth=-10,
     )
     d_neg = triage(neg_depth)
-    ok("negative spiral_depth → clamped to 0, valid", d_neg.lift_binding >= 1)
+    tr.ok("negative spiral_depth → clamped to 0, valid", d_neg.lift_binding >= 1)
 
     # Idempotency
     sig_idem = trust_vouch(AGINode.ALPHA, AGINode.BETA, "idem", confidence=0.70)
     d1 = triage(sig_idem)
     d2 = triage(sig_idem)
-    ok("idempotency: same signal → same binding", d1.lift_binding == d2.lift_binding)
+    tr.ok("idempotency: same signal → same binding", d1.lift_binding == d2.lift_binding)
 
     # ── Spiral etymology invariant ──────────────────────────────────────────
-    print("\n--- spiral etymology invariant ---")
+    tr.section("spiral etymology invariant")
     # inspiráció (FAITH, ascending) should have higher binding than
     # konspiráció (FAITH with contras, descending)
     d_insp = triage(faith_vouch(AGINode.ALPHA, AGINode.BETA, "inspiracio",
@@ -768,20 +756,13 @@ def _run_tests() -> None:
     d_konsp = triage(faith_vouch(AGINode.GAMMA, AGINode.BETA, "konspiracio",
                                   confidence=0.40, prior_binding=3, spiral_depth=0,
                                   contra_nodes=[AGINode.ALPHA]))
-    ok("inspiráció binding > konspiráció binding",
+    tr.ok("inspiráció binding > konspiráció binding",
        d_insp.lift_binding >= d_konsp.lift_binding)
-    ok("inspiráció → ASCENDING",
+    tr.ok("inspiráció → ASCENDING",
        d_insp.spiral_direction == SpiralDirection.ASCENDING)
 
     # ── Summary ─────────────────────────────────────────────────────────────
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

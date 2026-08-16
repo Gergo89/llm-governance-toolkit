@@ -43,6 +43,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── trap types and severity ──────────────────────────────────────────────────
@@ -352,20 +353,9 @@ def _item(item_id: str, *, agrees: bool = True, source: str = "src-0",
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("pattern_trap_infra.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('pattern_trap_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Clean signal
     print("\n[1] Clean signal — no traps")
@@ -375,37 +365,37 @@ def _run_tests() -> bool:
     ]
     sig = TrapSignal("clean-001", tuple(items))
     d = analyse_trap(sig)
-    ok("clean: no traps", len(d.traps_detected) == 0)
-    ok("clean: verdict=CLEAR", d.verdict == TrapVerdict.TRAP_CLEAR)
-    ok("clean: binding=4", d.binding_level == 4)
+    tr.ok("clean: no traps", len(d.traps_detected) == 0)
+    tr.ok("clean: verdict=CLEAR", d.verdict == TrapVerdict.TRAP_CLEAR)
+    tr.ok("clean: binding=4", d.binding_level == 4)
 
     # 2. Confirmation loop
     print("\n[2] Confirmation loop")
     items = [_item(f"i{i}", agrees=True, source=f"s{i}", rank=i) for i in range(10)]
     sig = TrapSignal("confirm-001", tuple(items))
     d = analyse_trap(sig)
-    ok("confirms: CONFIRMATION_LOOP detected",
+    tr.ok("confirms: CONFIRMATION_LOOP detected",
        TrapType.CONFIRMATION_LOOP in d.traps_detected)
-    ok("confirms: severity>=3", d.max_severity >= 3)
-    ok("confirms: verdict=BREAK", d.verdict == TrapVerdict.TRAP_BREAK)
+    tr.ok("confirms: severity>=3", d.max_severity >= 3)
+    tr.ok("confirms: verdict=BREAK", d.verdict == TrapVerdict.TRAP_BREAK)
 
     # 3. Filter bubble
     print("\n[3] Filter bubble")
     items = [_item(f"i{i}", source="only-source", rank=i) for i in range(8)]
     sig = TrapSignal("bubble-001", tuple(items))
     d = analyse_trap(sig)
-    ok("bubble: FILTER_BUBBLE detected",
+    tr.ok("bubble: FILTER_BUBBLE detected",
        TrapType.FILTER_BUBBLE in d.traps_detected)
-    ok("bubble: severity>=2", d.max_severity >= 2)
+    tr.ok("bubble: severity>=2", d.max_severity >= 2)
 
     # 4. Inference tunnel
     print("\n[4] Inference tunnel")
     items = [_item(f"i{i}", conclusions=1, source=f"s{i}", rank=i) for i in range(5)]
     sig = TrapSignal("tunnel-001", tuple(items))
     d = analyse_trap(sig)
-    ok("tunnel: INFERENCE_TUNNEL detected",
+    tr.ok("tunnel: INFERENCE_TUNNEL detected",
        TrapType.INFERENCE_TUNNEL in d.traps_detected)
-    ok("tunnel: severity=3", d.max_severity == 3)
+    tr.ok("tunnel: severity=3", d.max_severity == 3)
 
     # 5. Authority anchor
     print("\n[5] Authority anchor")
@@ -415,7 +405,7 @@ def _run_tests() -> bool:
     )
     sig = TrapSignal("authority-001", tuple(items))
     d = analyse_trap(sig)
-    ok("authority: AUTHORITY_ANCHOR detected",
+    tr.ok("authority: AUTHORITY_ANCHOR detected",
        TrapType.AUTHORITY_ANCHOR in d.traps_detected)
 
     # 6. Recency trap
@@ -425,7 +415,7 @@ def _run_tests() -> bool:
             [_item(f"j{i}", rank=10+i) for i in range(6)]
     sig = TrapSignal("recency-001", tuple(items))
     d = analyse_trap(sig)
-    ok("recency: RECENCY_TRAP detected",
+    tr.ok("recency: RECENCY_TRAP detected",
        TrapType.RECENCY_TRAP in d.traps_detected)
 
     # 7. Salience bias
@@ -434,7 +424,7 @@ def _run_tests() -> bool:
             [_item(f"i{i}", salience=0.1, rank=i+1) for i in range(4)]
     sig = TrapSignal("salience-001", tuple(items))
     d = analyse_trap(sig)
-    ok("salience: SALIENCE_BIAS detected",
+    tr.ok("salience: SALIENCE_BIAS detected",
        TrapType.SALIENCE_BIAS in d.traps_detected)
 
     # 8. Sunk cost anchor
@@ -444,7 +434,7 @@ def _run_tests() -> bool:
              _item("i2", investment=0.2, rank=2)]
     sig = TrapSignal("sunk-001", tuple(items))
     d = analyse_trap(sig)
-    ok("sunk: SUNK_COST_ANCHOR detected",
+    tr.ok("sunk: SUNK_COST_ANCHOR detected",
        TrapType.SUNK_COST_ANCHOR in d.traps_detected)
 
     # 9. Direct flags
@@ -452,16 +442,16 @@ def _run_tests() -> bool:
     sig = TrapSignal("direct-001", (),
                      direct_flags=frozenset({TrapType.CATEGORY_LOCK}))
     d = analyse_trap(sig)
-    ok("direct flag: CATEGORY_LOCK present",
+    tr.ok("direct flag: CATEGORY_LOCK present",
        TrapType.CATEGORY_LOCK in d.traps_detected)
-    ok("direct flag: severity=3", d.max_severity == 3)
+    tr.ok("direct flag: severity=3", d.max_severity == 3)
 
     # 10. Empty signal
     print("\n[10] Empty signal")
     sig = TrapSignal("empty-001", ())
     d = analyse_trap(sig)
-    ok("empty: no traps", len(d.traps_detected) == 0)
-    ok("empty: verdict=CLEAR", d.verdict == TrapVerdict.TRAP_CLEAR)
+    tr.ok("empty: no traps", len(d.traps_detected) == 0)
+    tr.ok("empty: verdict=CLEAR", d.verdict == TrapVerdict.TRAP_CLEAR)
 
     # 11. Multiple traps
     print("\n[11] Multiple traps in one signal")
@@ -472,8 +462,8 @@ def _run_tests() -> bool:
     )
     sig = TrapSignal("multi-001", tuple(items))
     d = analyse_trap(sig)
-    ok("multi: multiple traps detected", len(d.traps_detected) >= 2)
-    ok("multi: max severity high", d.max_severity >= 2)
+    tr.ok("multi: multiple traps detected", len(d.traps_detected) >= 2)
+    tr.ok("multi: max severity high", d.max_severity >= 2)
 
     # 12. Surface audit — clean
     print("\n[12] Surface audit — clean")
@@ -482,8 +472,8 @@ def _run_tests() -> bool:
         TrapDecision("s2", (), 0, TrapVerdict.TRAP_CLEAR, 4, ""),
     ]
     audit = audit_trap_surface(decisions)
-    ok("clean surface: SURFACE_CLEAN", audit.surface_verdict == TrapSurfaceVerdict.SURFACE_CLEAN)
-    ok("clean surface: clear_count=2", audit.clear_count == 2)
+    tr.ok("clean surface: SURFACE_CLEAN", audit.surface_verdict == TrapSurfaceVerdict.SURFACE_CLEAN)
+    tr.ok("clean surface: clear_count=2", audit.clear_count == 2)
 
     # 13. Surface audit — compromised
     print("\n[13] Surface audit — compromised")
@@ -492,7 +482,7 @@ def _run_tests() -> bool:
         TrapDecision("s2", (TrapType.INFERENCE_TUNNEL,), 3, TrapVerdict.TRAP_BREAK, 1, ""),
     ]
     audit = audit_trap_surface(decisions)
-    ok("two breaks → SURFACE_COMPROMISED",
+    tr.ok("two breaks → SURFACE_COMPROMISED",
        audit.surface_verdict == TrapSurfaceVerdict.SURFACE_COMPROMISED)
 
     # 14. Surface audit — degraded
@@ -502,7 +492,7 @@ def _run_tests() -> bool:
         TrapDecision("s2", (), 0, TrapVerdict.TRAP_CLEAR, 4, ""),
     ]
     audit = audit_trap_surface(decisions)
-    ok("one monitor → SURFACE_DEGRADED",
+    tr.ok("one monitor → SURFACE_DEGRADED",
        audit.surface_verdict == TrapSurfaceVerdict.SURFACE_DEGRADED)
 
     # 15. Most common trap
@@ -513,29 +503,23 @@ def _run_tests() -> bool:
         TrapDecision("s3", (TrapType.RECENCY_TRAP,), 1, TrapVerdict.TRAP_MONITOR, 3, ""),
     ]
     audit = audit_trap_surface(decisions)
-    ok("most common=SALIENCE_BIAS", audit.most_common_trap == TrapType.SALIENCE_BIAS)
+    tr.ok("most common=SALIENCE_BIAS", audit.most_common_trap == TrapType.SALIENCE_BIAS)
 
     # 16. Binding level from severity
     print("\n[16] Binding level from severity")
-    ok("sev=0 → bind=4", _binding_from_severity(0) == 4)
-    ok("sev=1 → bind=3", _binding_from_severity(1) == 3)
-    ok("sev=2 → bind=2", _binding_from_severity(2) == 2)
-    ok("sev=3 → bind=1", _binding_from_severity(3) == 1)
+    tr.ok("sev=0 → bind=4", _binding_from_severity(0) == 4)
+    tr.ok("sev=1 → bind=3", _binding_from_severity(1) == 3)
+    tr.ok("sev=2 → bind=2", _binding_from_severity(2) == 2)
+    tr.ok("sev=3 → bind=1", _binding_from_severity(3) == 1)
 
     # 17. Reason text
     print("\n[17] Reason text")
     items = [_item(f"i{i}", agrees=True, source=f"s{i}", rank=i) for i in range(10)]
     sig = TrapSignal("reason-001", tuple(items))
     d = analyse_trap(sig)
-    ok("reason non-empty", len(d.reason) > 5)
+    tr.ok("reason non-empty", len(d.reason) > 5)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

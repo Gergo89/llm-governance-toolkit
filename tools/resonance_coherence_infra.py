@@ -56,6 +56,7 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -589,89 +590,78 @@ def audit_phase_field(decisions: List[PhaseDecision]) -> PhaseFieldAudit:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== resonance_coherence_infra tests ===\n")
+    tr = TestRunner('resonance_coherence_infra  —  unit tests')
+    tr.header()
 
     # 1. Phase-locked resonance → AFFIRM, severity 0
     sig = PhaseSignal("locked", PhenomenonType.RESONANCE,
                       frequency_hz=440.0, reference_frequency_hz=440.0,
                       chain_attested=True)
     dec = analyse_phase(sig)
-    check("phase-locked: AFFIRM",    dec.verdict == PhaseVerdict.PHASE_AFFIRM)
-    check("phase-locked: binding 5", dec.binding_level == 5)
-    check("phase-locked: LOCKED",    dec.analysis.resonance_strength == ResonanceStrength.LOCKED)
+    tr.ok("phase-locked: AFFIRM",    dec.verdict == PhaseVerdict.PHASE_AFFIRM)
+    tr.ok("phase-locked: binding 5", dec.binding_level == 5)
+    tr.ok("phase-locked: LOCKED",    dec.analysis.resonance_strength == ResonanceStrength.LOCKED)
 
     # 2. Strong resonance (8% mismatch)
     sig = PhaseSignal("strong_res", PhenomenonType.RESONANCE,
                       frequency_hz=475.2, reference_frequency_hz=440.0)
     dec = analyse_phase(sig)
-    check("strong resonance: AFFIRM or SCRUTINISE",
+    tr.ok("strong resonance: AFFIRM or SCRUTINISE",
           dec.verdict in (PhaseVerdict.PHASE_AFFIRM, PhaseVerdict.PHASE_SCRUTINISE))
-    check("strong resonance: STRONG",
+    tr.ok("strong resonance: STRONG",
           dec.analysis.resonance_strength == ResonanceStrength.STRONG)
 
     # 3. Off-resonance (50% mismatch) → low binding
     sig = PhaseSignal("off_res", PhenomenonType.RESONANCE,
                       frequency_hz=660.0, reference_frequency_hz=440.0)
     dec = analyse_phase(sig)
-    check("off-resonance: binding ≤ 3", dec.binding_level <= 3)
-    check("off-resonance: NONE", dec.analysis.resonance_strength == ResonanceStrength.NONE)
+    tr.ok("off-resonance: binding ≤ 3", dec.binding_level <= 3)
+    tr.ok("off-resonance: NONE", dec.analysis.resonance_strength == ResonanceStrength.NONE)
 
     # 4. Chaotic resonance (Lyapunov > 0.05) → incalculable
     sig = PhaseSignal("chaos_res", PhenomenonType.RESONANCE,
                       frequency_hz=440.0, reference_frequency_hz=440.0,
                       lyapunov_exponent=0.35)
     dec = analyse_phase(sig)
-    check("chaotic resonance: incalculable", dec.analysis.is_incalculable)
-    check("chaotic resonance: GATHER", dec.verdict == PhaseVerdict.PHASE_GATHER)
+    tr.ok("chaotic resonance: incalculable", dec.analysis.is_incalculable)
+    tr.ok("chaotic resonance: GATHER", dec.verdict == PhaseVerdict.PHASE_GATHER)
 
     # 5. High coherence → AFFIRM
     sig = PhaseSignal("high_coh", PhenomenonType.COHERENCE, coherence_index=0.90)
     dec = analyse_phase(sig)
-    check("high coherence: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
+    tr.ok("high coherence: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
 
     # 6. Collapsed coherence → WITHHOLD or VOID
     sig = PhaseSignal("collapsed", PhenomenonType.COHERENCE, coherence_index=0.10)
     dec = analyse_phase(sig)
-    check("collapsed coherence: WITHHOLD or VOID",
+    tr.ok("collapsed coherence: WITHHOLD or VOID",
           dec.verdict in (PhaseVerdict.PHASE_WITHHOLD, PhaseVerdict.PHASE_VOID))
-    check("collapsed coherence: binding ≤ 2", dec.binding_level <= 2)
+    tr.ok("collapsed coherence: binding ≤ 2", dec.binding_level <= 2)
 
     # 7. Stable oscillation → AFFIRM
     sig = PhaseSignal("stable_osc", PhenomenonType.OSCILLATION, period_cv=0.05)
     dec = analyse_phase(sig)
-    check("stable oscillation: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
+    tr.ok("stable oscillation: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
 
     # 8. Chaotic oscillation → incalculable
     sig = PhaseSignal("chaotic_osc", PhenomenonType.OSCILLATION, period_cv=0.75)
     dec = analyse_phase(sig)
-    check("chaotic oscillation: incalculable", dec.analysis.is_incalculable)
+    tr.ok("chaotic oscillation: incalculable", dec.analysis.is_incalculable)
 
     # 9. Constructive interference → AFFIRM
     sig = PhaseSignal("constructive", PhenomenonType.INTERFERENCE,
                       overlap_coefficient=0.85, n_interfering_signals=2)
     dec = analyse_phase(sig)
-    check("constructive: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
-    check("constructive: CONSTRUCTIVE type",
+    tr.ok("constructive: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
+    tr.ok("constructive: CONSTRUCTIVE type",
           dec.analysis.interference_type == InterferenceType.CONSTRUCTIVE)
 
     # 10. Destructive interference → WITHHOLD
     sig = PhaseSignal("destructive", PhenomenonType.INTERFERENCE,
                       overlap_coefficient=0.10, n_interfering_signals=2)
     dec = analyse_phase(sig)
-    check("destructive: lower binding", dec.binding_level <= 3)
-    check("destructive: DESTRUCTIVE type",
+    tr.ok("destructive: lower binding", dec.binding_level <= 3)
+    tr.ok("destructive: DESTRUCTIVE type",
           dec.analysis.interference_type == InterferenceType.DESTRUCTIVE)
 
     # 11. Chaotic interference (many sources, low coherence)
@@ -679,28 +669,28 @@ def _run_tests() -> None:
                       overlap_coefficient=0.50, n_interfering_signals=5,
                       coherence_index=0.25)
     dec = analyse_phase(sig)
-    check("chaotic interference: incalculable", dec.analysis.is_incalculable)
-    check("chaotic interference: CHAOTIC type",
+    tr.ok("chaotic interference: incalculable", dec.analysis.is_incalculable)
+    tr.ok("chaotic interference: CHAOTIC type",
           dec.analysis.interference_type == InterferenceType.CHAOTIC)
 
     # 12. Decoherence — rapid rate
     sig = PhaseSignal("rapid_decoh", PhenomenonType.DECOHERENCE,
                       coherence_index=0.70, decoherence_rate=0.60)
     dec = analyse_phase(sig)
-    check("rapid decoherence: severity 3", dec.analysis.severity == 3)
-    check("rapid decoherence: binding ≤ 2", dec.binding_level <= 2)
+    tr.ok("rapid decoherence: severity 3", dec.analysis.severity == 3)
+    tr.ok("rapid decoherence: binding ≤ 2", dec.binding_level <= 2)
 
     # 13. Decoherence — negligible rate → AFFIRM
     sig = PhaseSignal("stable_coh", PhenomenonType.DECOHERENCE,
                       coherence_index=0.90, decoherence_rate=0.01)
     dec = analyse_phase(sig)
-    check("negligible decoherence: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
+    tr.ok("negligible decoherence: AFFIRM", dec.verdict == PhaseVerdict.PHASE_AFFIRM)
 
     # 14. Explicitly incalculable phenomenon
     sig = PhaseSignal("incalc", PhenomenonType.INCALCULABLE, lyapunov_exponent=0.5)
     dec = analyse_phase(sig)
-    check("explicit incalculable: is_incalculable", dec.analysis.is_incalculable)
-    check("explicit incalculable: GATHER", dec.verdict == PhaseVerdict.PHASE_GATHER)
+    tr.ok("explicit incalculable: is_incalculable", dec.analysis.is_incalculable)
+    tr.ok("explicit incalculable: GATHER", dec.verdict == PhaseVerdict.PHASE_GATHER)
 
     # 15. Binding always in [1, 5]
     test_sigs = [
@@ -713,14 +703,14 @@ def _run_tests() -> None:
     ]
     for s in test_sigs:
         d = analyse_phase(s)
-        check(f"binding in [1,5] for {s.signal_id}", 1 <= d.binding_level <= 5)
+        tr.ok(f"binding in [1,5] for {s.signal_id}", 1 <= d.binding_level <= 5)
 
     # 16. Surface audit: all stable → PHASE_STABLE
     stable_sigs = [PhaseSignal(f"s{i}", PhenomenonType.COHERENCE, coherence_index=0.90,
                                chain_attested=True) for i in range(5)]
     decisions = [analyse_phase(s) for s in stable_sigs]
     audit = audit_phase_field(decisions)
-    check("all stable surface → STABLE",
+    tr.ok("all stable surface → STABLE",
           audit.surface_verdict == PhaseSurface.PHASE_STABLE)
 
     # 17. Surface audit: all collapsed → INCOHERENT or COLLAPSED
@@ -728,32 +718,28 @@ def _run_tests() -> None:
                      for i in range(5)]
     decisions = [analyse_phase(s) for s in collapse_sigs]
     audit = audit_phase_field(decisions)
-    check("all collapsed → INCOHERENT or COLLAPSED",
+    tr.ok("all collapsed → INCOHERENT or COLLAPSED",
           audit.surface_verdict in (PhaseSurface.PHASE_INCOHERENT, PhaseSurface.PHASE_COLLAPSED))
 
     # 18. Empty surface audit
     audit = audit_phase_field([])
-    check("empty: PHASE_STABLE", audit.surface_verdict == PhaseSurface.PHASE_STABLE)
-    check("empty: total=0", audit.total_signals == 0)
+    tr.ok("empty: PHASE_STABLE", audit.surface_verdict == PhaseSurface.PHASE_STABLE)
+    tr.ok("empty: total=0", audit.total_signals == 0)
 
     # 19. Summary non-empty
     sig = PhaseSignal("sum_test", PhenomenonType.RESONANCE, frequency_hz=100.0,
                       reference_frequency_hz=100.0)
     dec = analyse_phase(sig)
-    check("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
+    tr.ok("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
 
     # 20. Governance action non-empty
     audit = audit_phase_field([analyse_phase(PhaseSignal("g_test", PhenomenonType.COHERENCE,
                                                           coherence_index=0.85))])
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -365,85 +366,78 @@ def _arg(
 
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('logic_signal_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # ── Group A: valid deduction ──────────────────────────────────────────────
     d = evaluate_logic(_arg("A01", premises_verified=True))
-    check("UT-A01: valid deduction+verified → SOUND, bind=5", d.verdict, LogicVerdict.SOUND)
-    check("UT-A01b: binding == 5",  d.binding_level, 5)
-    check("UT-A01c: AFFIRM",        d.governance_action, "AFFIRM")
-    check("UT-A01d: VALID_DEDUCTION in signals",
+    tr.expect("UT-A01: valid deduction+verified → SOUND, bind=5", d.verdict, LogicVerdict.SOUND)
+    tr.expect("UT-A01b: binding == 5",  d.binding_level, 5)
+    tr.expect("UT-A01c: AFFIRM",        d.governance_action, "AFFIRM")
+    tr.expect("UT-A01d: VALID_DEDUCTION in signals",
           LogicSignal.VALID_DEDUCTION in d.signals, True)
 
     d = evaluate_logic(_arg("A02"))
-    check("UT-A02: valid deduction unverified → SOUND, bind=4", d.verdict, LogicVerdict.SOUND)
-    check("UT-A02b: binding == 4", d.binding_level, 4)
+    tr.expect("UT-A02: valid deduction unverified → SOUND, bind=4", d.verdict, LogicVerdict.SOUND)
+    tr.expect("UT-A02b: binding == 4", d.binding_level, 4)
 
     # ── Group B: valid induction ──────────────────────────────────────────────
     d = evaluate_logic(_arg("A03", mode=InferenceMode.INDUCTION, n_supporting_cases=50))
-    check("UT-B01: n=50 induction → SOUND, bind=4",   d.verdict, LogicVerdict.SOUND)
-    check("UT-B01b: binding == 4",                      d.binding_level, 4)
-    check("UT-B01c: VALID_INDUCTION in signals",
+    tr.expect("UT-B01: n=50 induction → SOUND, bind=4",   d.verdict, LogicVerdict.SOUND)
+    tr.expect("UT-B01b: binding == 4",                      d.binding_level, 4)
+    tr.expect("UT-B01c: VALID_INDUCTION in signals",
           LogicSignal.VALID_INDUCTION in d.signals, True)
 
     d = evaluate_logic(_arg("B02", mode=InferenceMode.INDUCTION, n_supporting_cases=7))
-    check("UT-B02: n=7 induction → PLAUSIBLE, bind=3", d.verdict, LogicVerdict.PLAUSIBLE)
-    check("UT-B02b: binding == 3",                      d.binding_level, 3)
+    tr.expect("UT-B02: n=7 induction → PLAUSIBLE, bind=3", d.verdict, LogicVerdict.PLAUSIBLE)
+    tr.expect("UT-B02b: binding == 3",                      d.binding_level, 3)
 
     d = evaluate_logic(_arg("B03", mode=InferenceMode.INDUCTION, n_supporting_cases=2))
-    check("UT-B03: n=2 induction → PLAUSIBLE, bind=2", d.verdict, LogicVerdict.PLAUSIBLE)
-    check("UT-B03b: binding == 2",                      d.binding_level, 2)
+    tr.expect("UT-B03: n=2 induction → PLAUSIBLE, bind=2", d.verdict, LogicVerdict.PLAUSIBLE)
+    tr.expect("UT-B03b: binding == 2",                      d.binding_level, 2)
 
     # ── Group C: valid abduction ──────────────────────────────────────────────
     d = evaluate_logic(_arg("C01", mode=InferenceMode.ABDUCTION))
-    check("UT-C01: abduction → PLAUSIBLE, bind=3",   d.verdict, LogicVerdict.PLAUSIBLE)
-    check("UT-C01b: binding == 3",                    d.binding_level, 3)
-    check("UT-C01c: VALID_ABDUCTION in signals",
+    tr.expect("UT-C01: abduction → PLAUSIBLE, bind=3",   d.verdict, LogicVerdict.PLAUSIBLE)
+    tr.expect("UT-C01b: binding == 3",                    d.binding_level, 3)
+    tr.expect("UT-C01c: VALID_ABDUCTION in signals",
           LogicSignal.VALID_ABDUCTION in d.signals, True)
 
     # ── Group D: formal fallacies ─────────────────────────────────────────────
     d = evaluate_logic(_arg("D01", consequent_affirmed=True))
-    check("UT-D01: affirming consequent → FALLACIOUS",
+    tr.expect("UT-D01: affirming consequent → FALLACIOUS",
           d.verdict, LogicVerdict.FALLACIOUS)
-    check("UT-D01b: AFFIRMING_CONSEQUENT in signals",
+    tr.expect("UT-D01b: AFFIRMING_CONSEQUENT in signals",
           LogicSignal.AFFIRMING_CONSEQUENT in d.signals, True)
-    check("UT-D01c: WITHHOLD",  d.governance_action, "WITHHOLD")
-    check("UT-D01d: binding=2", d.binding_level, 2)
+    tr.expect("UT-D01c: WITHHOLD",  d.governance_action, "WITHHOLD")
+    tr.expect("UT-D01d: binding=2", d.binding_level, 2)
 
     d = evaluate_logic(_arg("D02", antecedent_denied=True))
-    check("UT-D02: denying antecedent → FALLACIOUS",
+    tr.expect("UT-D02: denying antecedent → FALLACIOUS",
           d.verdict, LogicVerdict.FALLACIOUS)
-    check("UT-D02b: DENYING_ANTECEDENT in signals",
+    tr.expect("UT-D02b: DENYING_ANTECEDENT in signals",
           LogicSignal.DENYING_ANTECEDENT in d.signals, True)
 
     d = evaluate_logic(_arg("D03", key_term_shifts=True))
-    check("UT-D03: equivocation → FALLACIOUS",
+    tr.expect("UT-D03: equivocation → FALLACIOUS",
           d.verdict, LogicVerdict.FALLACIOUS)
-    check("UT-D03b: EQUIVOCATION in signals",
+    tr.expect("UT-D03b: EQUIVOCATION in signals",
           LogicSignal.EQUIVOCATION in d.signals, True)
 
     d = evaluate_logic(_arg("D04",
                              mode=InferenceMode.INDUCTION,
                              is_universal_claim=True,
                              n_supporting_cases=3))
-    check("UT-D04: hasty generalisation (n=3, universal) → FALLACIOUS",
+    tr.expect("UT-D04: hasty generalisation (n=3, universal) → FALLACIOUS",
           d.verdict, LogicVerdict.FALLACIOUS)
-    check("UT-D04b: HASTY_GENERALISATION in signals",
+    tr.expect("UT-D04b: HASTY_GENERALISATION in signals",
           LogicSignal.HASTY_GENERALISATION in d.signals, True)
 
     d = evaluate_logic(_arg("D05",
                              mode=InferenceMode.INDUCTION,
                              is_universal_claim=True,
                              n_supporting_cases=15))
-    check("UT-D05: universal + n=15 → no hasty generalisation",
+    tr.expect("UT-D05: universal + n=15 → no hasty generalisation",
           LogicSignal.HASTY_GENERALISATION in d.signals, False)
 
     # ── Group E: structural failures ──────────────────────────────────────────
@@ -451,74 +445,74 @@ def _run_tests() -> None:
                 premises=frozenset({"C1", "P2"}),   # conclusion in premises
                 conclusion="C1")
     d = evaluate_logic(circ)
-    check("UT-E01: circular reasoning → INVALID",
+    tr.expect("UT-E01: circular reasoning → INVALID",
           d.verdict, LogicVerdict.INVALID)
-    check("UT-E01b: CIRCULAR_REASONING in signals",
+    tr.expect("UT-E01b: CIRCULAR_REASONING in signals",
           LogicSignal.CIRCULAR_REASONING in d.signals, True)
-    check("UT-E01c: VOID", d.governance_action, "VOID")
-    check("UT-E01d: binding=1", d.binding_level, 1)
+    tr.expect("UT-E01c: VOID", d.governance_action, "VOID")
+    tr.expect("UT-E01d: binding=1", d.binding_level, 1)
 
     contra = _arg("E02",
                   p_concepts=frozenset({"X", "NOT_X", "Y"}))
     d = evaluate_logic(contra)
-    check("UT-E02: contradictory premises → INVALID",
+    tr.expect("UT-E02: contradictory premises → INVALID",
           d.verdict, LogicVerdict.INVALID)
-    check("UT-E02b: CONTRADICTION in signals",
+    tr.expect("UT-E02b: CONTRADICTION in signals",
           LogicSignal.CONTRADICTION in d.signals, True)
 
     leap = _arg("E03",
                 p_concepts=frozenset({"A", "B"}),
                 c_concepts=frozenset({"A", "B", "Z"}))
     d = evaluate_logic(leap)
-    check("UT-E03: new concept Z in conclusion → UNSUPPORTED_LEAP",
+    tr.expect("UT-E03: new concept Z in conclusion → UNSUPPORTED_LEAP",
           LogicSignal.UNSUPPORTED_LEAP in d.signals, True)
-    check("UT-E03b: unsupported_concepts == {Z}",
+    tr.expect("UT-E03b: unsupported_concepts == {Z}",
           d.unsupported_concepts, frozenset({"Z"}))
-    check("UT-E03c: INVALID", d.verdict, LogicVerdict.INVALID)
+    tr.expect("UT-E03c: INVALID", d.verdict, LogicVerdict.INVALID)
 
     # No unsupported concepts
     d = evaluate_logic(_arg("E04",
                              p_concepts=frozenset({"A", "B"}),
                              c_concepts=frozenset({"A"})))
-    check("UT-E04: all conclusion concepts in premises → no UNSUPPORTED_LEAP",
+    tr.expect("UT-E04: all conclusion concepts in premises → no UNSUPPORTED_LEAP",
           LogicSignal.UNSUPPORTED_LEAP in d.signals, False)
 
     # ── Group F: audit_logic_surface ──────────────────────────────────────────
     clean = [_arg(f"F{i}", premises_verified=True) for i in range(5)]
     audit = audit_logic_surface(clean)
-    check("UT-F01: all sound → SURFACE_CLEAN",  audit.surface_verdict, LogicSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-F02: sound == 5",                  audit.sound, 5)
+    tr.expect("UT-F01: all sound → SURFACE_CLEAN",  audit.surface_verdict, LogicSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-F02: sound == 5",                  audit.sound, 5)
 
     one_invalid = [_arg("F10", premises_verified=True),
                    _arg("F11", premises=frozenset({"C1"}), conclusion="C1")]
     audit = audit_logic_surface(one_invalid)
-    check("UT-F03: 1 invalid → CONTAMINATED",
+    tr.expect("UT-F03: 1 invalid → CONTAMINATED",
           audit.surface_verdict, LogicSurfaceVerdict.SURFACE_CONTAMINATED)
 
     three_invalid = [_arg(f"F2{i}", premises=frozenset({"C1"}), conclusion="C1")
                      for i in range(3)]
     audit = audit_logic_surface(three_invalid)
-    check("UT-F04: 3 invalid → COMPROMISED",
+    tr.expect("UT-F04: 3 invalid → COMPROMISED",
           audit.surface_verdict, LogicSurfaceVerdict.SURFACE_COMPROMISED)
 
     empty = audit_logic_surface([])
-    check("UT-F05: empty → SURFACE_CLEAN", empty.surface_verdict, LogicSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-F05: empty → SURFACE_CLEAN", empty.surface_verdict, LogicSurfaceVerdict.SURFACE_CLEAN)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
 
     # ST-01: 1000 valid deductions → all SOUND, SURFACE_CLEAN
     st1 = [_arg(f"s1_{i}", premises_verified=True) for i in range(1000)]
     a1 = audit_logic_surface(st1)
-    check("ST-01: 1000 sound → SURFACE_CLEAN", a1.surface_verdict, LogicSurfaceVerdict.SURFACE_CLEAN)
-    check("ST-01b: sound == 1000",              a1.sound, 1000)
+    tr.expect("ST-01: 1000 sound → SURFACE_CLEAN", a1.surface_verdict, LogicSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("ST-01b: sound == 1000",              a1.sound, 1000)
 
     # ST-02: 500 circular arguments → all INVALID, COMPROMISED
     st2 = [_arg(f"s2_{i}", premises=frozenset({f"C{i}"}), conclusion=f"C{i}")
            for i in range(500)]
     a2 = audit_logic_surface(st2)
-    check("ST-02: 500 circular → SURFACE_COMPROMISED",
+    tr.expect("ST-02: 500 circular → SURFACE_COMPROMISED",
           a2.surface_verdict, LogicSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-02b: invalid == 500", a2.invalid, 500)
+    tr.expect("ST-02b: invalid == 500", a2.invalid, 500)
 
     # ST-03: mixed 800 sound + 200 invalid → COMPROMISED
     st3 = (
@@ -526,16 +520,16 @@ def _run_tests() -> None:
         + [_arg(f"s3b{i}", premises=frozenset({f"C{i}"}), conclusion=f"C{i}") for i in range(200)]
     )
     a3 = audit_logic_surface(st3)
-    check("ST-03: 200 invalid → COMPROMISED",
+    tr.expect("ST-03: 200 invalid → COMPROMISED",
           a3.surface_verdict, LogicSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-03b: sound == 800",   a3.sound, 800)
-    check("ST-03c: invalid == 200", a3.invalid, 200)
+    tr.expect("ST-03b: sound == 800",   a3.sound, 800)
+    tr.expect("ST-03c: invalid == 200", a3.invalid, 200)
 
     # ST-04: fallacy flood → all FALLACIOUS, SURFACE_DEGRADED (no INVALID)
     st4 = [_arg(f"s4_{i}", consequent_affirmed=True) for i in range(300)]
     a4 = audit_logic_surface(st4)
-    check("ST-04: 300 fallacious → all FALLACIOUS", a4.fallacious, 300)
-    check("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, LogicSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("ST-04: 300 fallacious → all FALLACIOUS", a4.fallacious, 300)
+    tr.expect("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, LogicSurfaceVerdict.SURFACE_DEGRADED)
 
     # ST-05: unsupported leap mass → all INVALID
     st5 = [_arg(f"s5_{i}",
@@ -543,21 +537,21 @@ def _run_tests() -> None:
                 c_concepts=frozenset({"A", "B", f"Z{i}"}))
            for i in range(100)]
     a5 = audit_logic_surface(st5)
-    check("ST-05: 100 unsupported leaps → all INVALID", a5.invalid, 100)
-    check("ST-05b: SURFACE_COMPROMISED",
+    tr.expect("ST-05: 100 unsupported leaps → all INVALID", a5.invalid, 100)
+    tr.expect("ST-05b: SURFACE_COMPROMISED",
           a5.surface_verdict, LogicSurfaceVerdict.SURFACE_COMPROMISED)
 
     # ST-06: 2 invalid → CONTAMINATED not COMPROMISED
     st6 = [_arg(f"s6_{i}", premises=frozenset({f"X{i}"}), conclusion=f"X{i}")
            for i in range(2)]
     a6 = audit_logic_surface(st6)
-    check("ST-06: 2 invalid → CONTAMINATED",
+    tr.expect("ST-06: 2 invalid → CONTAMINATED",
           a6.surface_verdict, LogicSurfaceVerdict.SURFACE_CONTAMINATED)
 
     # ST-07: induction n-scaling
     d_large = evaluate_logic(_arg("s7a", mode=InferenceMode.INDUCTION, n_supporting_cases=100))
     d_small = evaluate_logic(_arg("s7b", mode=InferenceMode.INDUCTION, n_supporting_cases=2))
-    check("ST-07: large-n induction binding > small-n",
+    tr.expect("ST-07: large-n induction binding > small-n",
           d_large.binding_level > d_small.binding_level, True)
 
     # ST-08: signal_distribution accuracy
@@ -566,29 +560,27 @@ def _run_tests() -> None:
         + [_arg(f"s8b{i}", consequent_affirmed=True) for i in range(100)]
     )
     a8 = audit_logic_surface(st8)
-    check("ST-08: VALID_DEDUCTION dist == 400",
+    tr.expect("ST-08: VALID_DEDUCTION dist == 400",
           a8.signal_distribution[LogicSignal.VALID_DEDUCTION.value], 400)
-    check("ST-08b: AFFIRMING_CONSEQUENT dist == 100",
+    tr.expect("ST-08b: AFFIRMING_CONSEQUENT dist == 100",
           a8.signal_distribution[LogicSignal.AFFIRMING_CONSEQUENT.value], 100)
 
     # ST-09: contradiction detection across 200 arguments
     st9 = [_arg(f"s9_{i}", p_concepts=frozenset({"X", "NOT_X", "Y"})) for i in range(200)]
     a9 = audit_logic_surface(st9)
-    check("ST-09: 200 contradictions → all INVALID", a9.invalid, 200)
-    check("ST-09b: SURFACE_COMPROMISED",
+    tr.expect("ST-09: 200 contradictions → all INVALID", a9.invalid, 200)
+    tr.expect("ST-09b: SURFACE_COMPROMISED",
           a9.surface_verdict, LogicSurfaceVerdict.SURFACE_COMPROMISED)
 
     # ST-10: high_severity_count threshold for COMPROMISED
     st10 = [_arg(f"s10_{i}", premises=frozenset({f"C{i}"}), conclusion=f"C{i}")
             for i in range(3)]
     a10 = audit_logic_surface(st10)
-    check("ST-10: high_sev == 3 → COMPROMISED",
+    tr.expect("ST-10: high_sev == 3 → COMPROMISED",
           a10.surface_verdict, LogicSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-10b: high_severity_count == 3", a10.high_severity_count, 3)
+    tr.expect("ST-10b: high_severity_count == 3", a10.high_severity_count, 3)
 
-    print(f"\nlogic_signal_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 

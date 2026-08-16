@@ -41,6 +41,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -167,21 +168,9 @@ _FIELD_CONV_THRESH        = 0.40  # converging+stable fraction → CONVERGING
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _safe_float(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
 def _safe_int_binding(x, default: int = 3) -> int:
-    v = _safe_float(x, float(default))
+    v = _sf(x, float(default))
     return max(1, min(5, round(v)))
-
-
-def _clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
 
 
 def _classify_drift(
@@ -261,10 +250,10 @@ def assess_drift(signal: DriftSignal) -> DriftDecision:
 
     b_a   = _safe_int_binding(a.binding)
     b_b   = _safe_int_binding(b.binding)
-    c_a   = _clamp01(_safe_float(a.confidence, 0.5))
-    c_b   = _clamp01(_safe_float(b.confidence, 0.5))
-    t_a   = _safe_float(a.timestamp, 0.0)
-    t_b   = _safe_float(b.timestamp, 1.0)
+    c_a   = _c01(_sf(a.confidence, 0.5))
+    c_b   = _c01(_sf(b.confidence, 0.5))
+    t_a   = _sf(a.timestamp, 0.0)
+    t_b   = _sf(b.timestamp, 1.0)
 
     delta_b = float(b_b - b_a)
     delta_c = c_b - c_a
@@ -460,61 +449,48 @@ def phase_jump_signal(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
 
-    passed = 0
-    failed = 0
 
-    def ok(label: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("divergence_convergence_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('divergence_convergence_infra  —  unit tests')
+    tr.header()
 
     # ── Builder signals ──────────────────────────────────────────────────────
-    print("\n--- builder signals ---")
+    tr.section("builder signals")
     d_stable = assess_drift(stable_signal("S1", binding=5))
-    ok("stable: drift=STABLE_CONVERGENCE",
+    tr.ok("stable: drift=STABLE_CONVERGENCE",
        d_stable.drift_class == DriftClass.STABLE_CONVERGENCE)
-    ok("stable: binding=5",    d_stable.binding == 5)
-    ok("stable: ANCHOR",       d_stable.verdict == DriftVerdict.ANCHOR)
-    ok("stable: eta=0.0",      d_stable.convergence_eta == 0.0)
+    tr.ok("stable: binding=5",    d_stable.binding == 5)
+    tr.ok("stable: ANCHOR",       d_stable.verdict == DriftVerdict.ANCHOR)
+    tr.ok("stable: eta=0.0",      d_stable.convergence_eta == 0.0)
 
     d_conv = assess_drift(converging_signal("C1"))
-    ok("converging: drift=CONVERGING",
+    tr.ok("converging: drift=CONVERGING",
        d_conv.drift_class == DriftClass.CONVERGING)
-    ok("converging: binding=4", d_conv.binding == 4)
-    ok("converging: AFFIRM",    d_conv.verdict == DriftVerdict.AFFIRM)
-    ok("converging: eta is positive float",
+    tr.ok("converging: binding=4", d_conv.binding == 4)
+    tr.ok("converging: AFFIRM",    d_conv.verdict == DriftVerdict.AFFIRM)
+    tr.ok("converging: eta is positive float",
        d_conv.convergence_eta is None or d_conv.convergence_eta >= 0)
 
     d_div = assess_drift(diverging_signal("D1"))
-    ok("diverging: drift ∈ slow/fast",
+    tr.ok("diverging: drift ∈ slow/fast",
        d_div.drift_class in (DriftClass.SLOW_DIVERGENCE, DriftClass.FAST_DIVERGENCE))
-    ok("diverging: binding ≤ 2", d_div.binding <= 2)
-    ok("diverging: eta=None",    d_div.convergence_eta is None)
+    tr.ok("diverging: binding ≤ 2", d_div.binding <= 2)
+    tr.ok("diverging: eta=None",    d_div.convergence_eta is None)
 
     d_par = assess_drift(parallel_signal("P1"))
-    ok("parallel: drift=PARALLEL", d_par.drift_class == DriftClass.PARALLEL)
-    ok("parallel: binding=3",      d_par.binding == 3)
-    ok("parallel: HOLD",           d_par.verdict == DriftVerdict.HOLD)
+    tr.ok("parallel: drift=PARALLEL", d_par.drift_class == DriftClass.PARALLEL)
+    tr.ok("parallel: binding=3",      d_par.binding == 3)
+    tr.ok("parallel: HOLD",           d_par.verdict == DriftVerdict.HOLD)
 
     d_phase = assess_drift(phase_jump_signal("PH1"))
-    ok("phase jump: drift=PHASE_TRANSITION",
+    tr.ok("phase jump: drift=PHASE_TRANSITION",
        d_phase.drift_class == DriftClass.PHASE_TRANSITION)
-    ok("phase jump: binding=1",    d_phase.binding == 1)
-    ok("phase jump: VOID",         d_phase.verdict == DriftVerdict.VOID)
-    ok("phase jump: eta=None",     d_phase.convergence_eta is None)
+    tr.ok("phase jump: binding=1",    d_phase.binding == 1)
+    tr.ok("phase jump: VOID",         d_phase.verdict == DriftVerdict.VOID)
+    tr.ok("phase jump: eta=None",     d_phase.convergence_eta is None)
 
     # ── Velocity-based classification ─────────────────────────────────────────
-    print("\n--- velocity-based classification ---")
+    tr.section("velocity-based classification")
     # Fast divergence: velocity ≤ -1.5
     sig_fast = DriftSignal(
         claim_id="fast_div",
@@ -522,9 +498,9 @@ def _run_tests() -> None:
         snapshot_b=DriftSnapshot(binding=2, confidence=0.30, timestamp=1.0),
     )
     d_fast = assess_drift(sig_fast)
-    ok("velocity=-3 → FAST_DIVERGENCE or PHASE",
+    tr.ok("velocity=-3 → FAST_DIVERGENCE or PHASE",
        d_fast.drift_class in (DriftClass.FAST_DIVERGENCE, DriftClass.PHASE_TRANSITION))
-    ok("fast div → binding=1",   d_fast.binding == 1)
+    tr.ok("fast div → binding=1",   d_fast.binding == 1)
 
     # Slow divergence: velocity in (-1.5, -0.5]
     sig_slow = DriftSignal(
@@ -533,12 +509,12 @@ def _run_tests() -> None:
         snapshot_b=DriftSnapshot(binding=3, confidence=0.60, timestamp=1.0),
     )
     d_slow = assess_drift(sig_slow)
-    ok("velocity=-1 → SLOW_DIVERGENCE",
+    tr.ok("velocity=-1 → SLOW_DIVERGENCE",
        d_slow.drift_class == DriftClass.SLOW_DIVERGENCE)
-    ok("slow div: SCRUTINISE", d_slow.verdict == DriftVerdict.SCRUTINISE)
+    tr.ok("slow div: SCRUTINISE", d_slow.verdict == DriftVerdict.SCRUTINISE)
 
     # ── Confidence modifier ───────────────────────────────────────────────────
-    print("\n--- confidence modifier ---")
+    tr.section("confidence modifier")
     sig_conf_up = DriftSignal(
         claim_id="conf_up",
         snapshot_a=DriftSnapshot(binding=3, confidence=0.40, timestamp=0.0),
@@ -551,53 +527,53 @@ def _run_tests() -> None:
     )
     d_up   = assess_drift(sig_conf_up)
     d_down = assess_drift(sig_conf_down)
-    ok("rising conf → binding ≥ falling conf binding",
+    tr.ok("rising conf → binding ≥ falling conf binding",
        d_up.binding >= d_down.binding)
 
     # ── Chain attestation ─────────────────────────────────────────────────────
-    print("\n--- chain attestation ---")
+    tr.section("chain attestation")
     sig_chain_no  = converging_signal("ch_no")
     sig_chain_yes = DriftSignal(**{**sig_chain_no.__dict__,
                                    "chain_attested": True})
     d_no  = assess_drift(sig_chain_no)
     d_yes = assess_drift(sig_chain_yes)
-    ok("chain_attested → binding ≥ without chain",
+    tr.ok("chain_attested → binding ≥ without chain",
        d_yes.binding >= d_no.binding)
 
     # ── Binding delta accuracy ────────────────────────────────────────────────
-    print("\n--- binding delta accuracy ---")
-    ok("converging: Δbinding > 0",  d_conv.binding_delta > 0)
-    ok("diverging: Δbinding < 0",   d_div.binding_delta < 0)
-    ok("parallel: Δbinding = 0",    d_par.binding_delta == 0.0)
-    ok("phase jump: |Δbinding| ≥ 3",abs(d_phase.binding_delta) >= 3)
+    tr.section("binding delta accuracy")
+    tr.ok("converging: Δbinding > 0",  d_conv.binding_delta > 0)
+    tr.ok("diverging: Δbinding < 0",   d_div.binding_delta < 0)
+    tr.ok("parallel: Δbinding = 0",    d_par.binding_delta == 0.0)
+    tr.ok("phase jump: |Δbinding| ≥ 3",abs(d_phase.binding_delta) >= 3)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_drift_field([])
-    ok("empty field → STABLE",     fa_empty.field_verdict == "STABLE")
-    ok("empty field → binding=5",  fa_empty.mean_binding  == 5.0)
+    tr.ok("empty field → STABLE",     fa_empty.field_verdict == "STABLE")
+    tr.ok("empty field → binding=5",  fa_empty.mean_binding  == 5.0)
 
     # Stable field
     stables = [assess_drift(stable_signal(f"S{i}")) for i in range(6)]
     fa_stable = audit_drift_field(stables)
-    ok("all stable → STABLE or CONVERGING",
+    tr.ok("all stable → STABLE or CONVERGING",
        fa_stable.field_verdict in ("STABLE", "CONVERGING"))
-    ok("all stable → anchor_count=6", fa_stable.anchor_count == 6)
+    tr.ok("all stable → anchor_count=6", fa_stable.anchor_count == 6)
 
     # Converging field
     convs = [assess_drift(converging_signal(f"C{i}")) for i in range(5)]
     fa_conv = audit_drift_field(convs)
-    ok("all converging → CONVERGING", fa_conv.field_verdict == "CONVERGING")
+    tr.ok("all converging → CONVERGING", fa_conv.field_verdict == "CONVERGING")
 
     # Crisis field: phase jumps
     crises = [assess_drift(phase_jump_signal(f"PH{i}")) for i in range(4)]
     others = [assess_drift(parallel_signal(f"PR{i}")) for i in range(4)]
     fa_crisis = audit_drift_field(crises + others)
-    ok("50% phase → CRISIS",       fa_crisis.field_verdict == "CRISIS")
-    ok("crisis → phase_count=4",   fa_crisis.phase_count == 4)
+    tr.ok("50% phase → CRISIS",       fa_crisis.field_verdict == "CRISIS")
+    tr.ok("crisis → phase_count=4",   fa_crisis.phase_count == 4)
 
     # ── Sentinel & edge cases ─────────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     nan_sig = DriftSignal(
         claim_id="nan_test",
@@ -606,7 +582,7 @@ def _run_tests() -> None:
         snapshot_b=DriftSnapshot(binding=3, confidence=0.60, timestamp=1.0),
     )
     d_nan = assess_drift(nan_sig)
-    ok("NaN snapshot → valid binding", 1 <= d_nan.binding <= 5)
+    tr.ok("NaN snapshot → valid binding", 1 <= d_nan.binding <= 5)
 
     inf_sig = DriftSignal(
         claim_id="inf_test",
@@ -615,7 +591,7 @@ def _run_tests() -> None:
                                   timestamp=float("inf")),
     )
     d_inf = assess_drift(inf_sig)
-    ok("Inf timestamp → valid binding", 1 <= d_inf.binding <= 5)
+    tr.ok("Inf timestamp → valid binding", 1 <= d_inf.binding <= 5)
 
     # Same timestamp: delta_t → 0.001 guard
     sig_zero_t = DriftSignal(
@@ -624,29 +600,22 @@ def _run_tests() -> None:
         snapshot_b=DriftSnapshot(binding=3, confidence=0.60, timestamp=5.0),
     )
     d_zero = assess_drift(sig_zero_t)
-    ok("zero delta_t → handled, valid", 1 <= d_zero.binding <= 5)
+    tr.ok("zero delta_t → handled, valid", 1 <= d_zero.binding <= 5)
 
     # Idempotency
     sig_idem = stable_signal("idem")
     d1 = assess_drift(sig_idem)
     d2 = assess_drift(sig_idem)
-    ok("idempotency: same binding",    d1.binding == d2.binding)
+    tr.ok("idempotency: same binding",    d1.binding == d2.binding)
 
     # ── Spiral invariant ──────────────────────────────────────────────────────
-    print("\n--- spiral invariant (nem vonal, hanem spirál) ---")
+    tr.section("spiral invariant (nem vonal, hanem spirál)")
     # Converging signal always outbinds diverging signal
-    ok("converging outbinds diverging", d_conv.binding > d_div.binding)
-    ok("stable outbinds all others",    d_stable.binding >= d_conv.binding)
+    tr.ok("converging outbinds diverging", d_conv.binding > d_div.binding)
+    tr.ok("stable outbinds all others",    d_stable.binding >= d_conv.binding)
 
     # Summary
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -646,33 +647,22 @@ def synthetic_signal(signal_id: str = "synthetic_baseline") -> GenerationSignal:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== digital_generation_detector_infra tests ===\n")
+    tr = TestRunner('digital_generation_detector_infra  —  unit tests')
+    tr.header()
 
     # 1. Organic signal → AFFIRM, binding 4 or 5
     dec = analyse_generation(organic_signal())
-    check("organic: GENERATION_AFFIRM",
+    tr.ok("organic: GENERATION_AFFIRM",
           dec.verdict == GenerationVerdict.GENERATION_AFFIRM)
-    check("organic: binding >= 4", dec.binding_level >= 4)
-    check("organic: no artefacts", dec.dominant_artifact == GenerationArtifact.CLEAN)
+    tr.ok("organic: binding >= 4", dec.binding_level >= 4)
+    tr.ok("organic: no artefacts", dec.dominant_artifact == GenerationArtifact.CLEAN)
 
     # 2. Synthetic signal → VOID or WITHHOLD, binding 1 or 2
     dec = analyse_generation(synthetic_signal())
-    check("synthetic: VOID or WITHHOLD",
+    tr.ok("synthetic: VOID or WITHHOLD",
           dec.verdict in (GenerationVerdict.GENERATION_VOID, GenerationVerdict.GENERATION_WITHHOLD))
-    check("synthetic: binding <= 2", dec.binding_level <= 2)
-    check("synthetic: multiple artefacts", len(dec.artifact_reports) >= 4)
+    tr.ok("synthetic: binding <= 2", dec.binding_level <= 2)
+    tr.ok("synthetic: multiple artefacts", len(dec.artifact_reports) >= 4)
 
     # 3. Entropy collapse only
     sig = GenerationSignal(
@@ -680,9 +670,9 @@ def _run_tests() -> None:
         normalised_entropy=0.20,
     )
     dec = analyse_generation(sig)
-    check("entropy collapse detected",
+    tr.ok("entropy collapse detected",
           any(r.artifact_type == GenerationArtifact.ENTROPY_COLLAPSE for r in dec.artifact_reports))
-    check("entropy collapse: severity 3",
+    tr.ok("entropy collapse: severity 3",
           any(r.severity == 3 for r in dec.artifact_reports))
 
     # 4. Clean signal — high entropy, good Zipf, chain attested → binding 5
@@ -693,8 +683,8 @@ def _run_tests() -> None:
         chain_attested=True,
     )
     dec = analyse_generation(sig)
-    check("clean+attested: binding 5", dec.binding_level == 5)
-    check("clean+attested: AFFIRM", dec.verdict == GenerationVerdict.GENERATION_AFFIRM)
+    tr.ok("clean+attested: binding 5", dec.binding_level == 5)
+    tr.ok("clean+attested: AFFIRM", dec.verdict == GenerationVerdict.GENERATION_AFFIRM)
 
     # 5. Poor Zipfian fit → ZIPFIAN_DEVIATION
     sig = GenerationSignal(
@@ -703,7 +693,7 @@ def _run_tests() -> None:
         zipfian_r2=0.45,
     )
     dec = analyse_generation(sig)
-    check("zipfian deviation detected",
+    tr.ok("zipfian deviation detected",
           any(r.artifact_type == GenerationArtifact.ZIPFIAN_DEVIATION for r in dec.artifact_reports))
 
     # 6. Spectral regularity
@@ -713,7 +703,7 @@ def _run_tests() -> None:
         spectral_cv=0.06,
     )
     dec = analyse_generation(sig)
-    check("spectral regularity detected",
+    tr.ok("spectral regularity detected",
           any(r.artifact_type == GenerationArtifact.SPECTRAL_REGULARITY for r in dec.artifact_reports))
 
     # 7. Temporal anomaly (too clock-like)
@@ -723,7 +713,7 @@ def _run_tests() -> None:
         temporal_jitter_cv=0.02,
     )
     dec = analyse_generation(sig)
-    check("temporal anomaly detected",
+    tr.ok("temporal anomaly detected",
           any(r.artifact_type == GenerationArtifact.TEMPORAL_ANOMALY for r in dec.artifact_reports))
 
     # 8. Hallucination pattern
@@ -733,9 +723,9 @@ def _run_tests() -> None:
         hallucination_score=0.85,
     )
     dec = analyse_generation(sig)
-    check("hallucination pattern detected",
+    tr.ok("hallucination pattern detected",
           any(r.artifact_type == GenerationArtifact.HALLUCINATION_PATTERN for r in dec.artifact_reports))
-    check("hallucination: severity 3",
+    tr.ok("hallucination: severity 3",
           any(r.artifact_type == GenerationArtifact.HALLUCINATION_PATTERN and r.severity == 3
               for r in dec.artifact_reports))
 
@@ -747,7 +737,7 @@ def _run_tests() -> None:
         external_grounding=0.08,
     )
     dec = analyse_generation(sig)
-    check("confabulation signature detected",
+    tr.ok("confabulation signature detected",
           any(r.artifact_type == GenerationArtifact.CONFABULATION_SIGNATURE for r in dec.artifact_reports))
 
     # 10. No confabulation if grounding is high
@@ -758,7 +748,7 @@ def _run_tests() -> None:
         external_grounding=0.80,
     )
     dec = analyse_generation(sig)
-    check("no confabulation when well-grounded",
+    tr.ok("no confabulation when well-grounded",
           not any(r.artifact_type == GenerationArtifact.CONFABULATION_SIGNATURE
                   for r in dec.artifact_reports))
 
@@ -769,7 +759,7 @@ def _run_tests() -> None:
         fano_factor=0.04,
     )
     dec = analyse_generation(sig)
-    check("distributional smoothness detected",
+    tr.ok("distributional smoothness detected",
           any(r.artifact_type == GenerationArtifact.DISTRIBUTIONAL_SMOOTHNESS
               for r in dec.artifact_reports))
 
@@ -780,7 +770,7 @@ def _run_tests() -> None:
         watermark_shift_index=0.30,
     )
     dec = analyse_generation(sig)
-    check("watermark trace detected",
+    tr.ok("watermark trace detected",
           any(r.artifact_type == GenerationArtifact.WATERMARK_TRACE for r in dec.artifact_reports))
 
     # 13. Repetition fingerprint
@@ -790,21 +780,21 @@ def _run_tests() -> None:
         repetition_fraction=0.40,
     )
     dec = analyse_generation(sig)
-    check("repetition fingerprint detected",
+    tr.ok("repetition fingerprint detected",
           any(r.artifact_type == GenerationArtifact.REPETITION_FINGERPRINT
               for r in dec.artifact_reports))
 
     # 14. Surface audit — all organic → GENERATION_CLEAN
     decisions = [analyse_generation(organic_signal(f"org_{i}")) for i in range(5)]
     audit = audit_generation_surface(decisions)
-    check("surface: all organic → CLEAN",
+    tr.ok("surface: all organic → CLEAN",
           audit.surface_verdict == GenerationSurfaceVerdict.GENERATION_CLEAN)
-    check("surface: 5 clean count", audit.clean_count == 5)
+    tr.ok("surface: 5 clean count", audit.clean_count == 5)
 
     # 15. Surface audit — all synthetic → COMPROMISED or SYNTHETIC
     decisions = [analyse_generation(synthetic_signal(f"syn_{i}")) for i in range(5)]
     audit = audit_generation_surface(decisions)
-    check("surface: all synthetic → COMPROMISED or SYNTHETIC",
+    tr.ok("surface: all synthetic → COMPROMISED or SYNTHETIC",
           audit.surface_verdict in (
               GenerationSurfaceVerdict.GENERATION_COMPROMISED,
               GenerationSurfaceVerdict.GENERATION_SYNTHETIC,
@@ -814,35 +804,31 @@ def _run_tests() -> None:
     mixed = [analyse_generation(organic_signal(f"o{i}")) for i in range(4)]
     mixed += [analyse_generation(synthetic_signal("s0"))]
     audit = audit_generation_surface(mixed)
-    check("surface: mixed → not CLEAN",
+    tr.ok("surface: mixed → not CLEAN",
           audit.surface_verdict != GenerationSurfaceVerdict.GENERATION_CLEAN)
 
     # 17. Empty surface audit
     audit = audit_generation_surface([])
-    check("empty surface → CLEAN default", audit.surface_verdict == GenerationSurfaceVerdict.GENERATION_CLEAN)
-    check("empty surface → total 0", audit.total_signals == 0)
+    tr.ok("empty surface → CLEAN default", audit.surface_verdict == GenerationSurfaceVerdict.GENERATION_CLEAN)
+    tr.ok("empty surface → total 0", audit.total_signals == 0)
 
     # 18. Summary text present
     dec = analyse_generation(organic_signal())
-    check("summary is non-empty string", isinstance(dec.summary, str) and len(dec.summary) > 0)
+    tr.ok("summary is non-empty string", isinstance(dec.summary, str) and len(dec.summary) > 0)
 
     # 19. Binding level in range 1–5 for all cases
     for i, s in enumerate([organic_signal(), synthetic_signal()]):
         d = analyse_generation(s)
-        check(f"binding in [1,5] for signal {i}", 1 <= d.binding_level <= 5)
+        tr.ok(f"binding in [1,5] for signal {i}", 1 <= d.binding_level <= 5)
 
     # 20. Governance action present in surface audit
     decisions = [analyse_generation(organic_signal())]
     audit = audit_generation_surface(decisions)
-    check("governance_action is non-empty string",
+    tr.ok("governance_action is non-empty string",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -49,6 +49,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
+from governance_core import TestRunner
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -535,38 +536,27 @@ class SwarmMeshFederation:
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("swarm_mesh_federation.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('swarm_mesh_federation.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Agent role inference
     print("\n[1] Agent role inference")
     a = SwarmAgent("agent-001", "test")
-    ok("no interactions → latent", a.inferred_role == "latent")
+    tr.ok("no interactions → latent", a.inferred_role == "latent")
     for other in ["b", "c", "d", "e", "f"]:
         a.interact(other, strength=0.8)
-    ok("5+ partners, high strength → hub-connector", a.inferred_role == "hub-connector")
+    tr.ok("5+ partners, high strength → hub-connector", a.inferred_role == "hub-connector")
 
     a2 = SwarmAgent("agent-002")
     for other in ["x", "y", "z", "w", "v"]:
         a2.interact(other, strength=0.3)
-    ok("5+ partners, low strength → broadcaster", a2.inferred_role == "broadcaster")
+    tr.ok("5+ partners, low strength → broadcaster", a2.inferred_role == "broadcaster")
 
     a3 = SwarmAgent("agent-003")
     for _ in range(6):
         a3.interact("sole-partner", 0.7)
-    ok("1 partner, many interactions → dyadic-specialist",
+    tr.ok("1 partner, many interactions → dyadic-specialist",
        a3.inferred_role == "dyadic-specialist")
 
     # 2. Agent state
@@ -581,26 +571,26 @@ def _run_tests() -> bool:
     a.join_context("ctx2", 0.8)
     a.join_context("ctx3", 0.7)
     state = a.qualitative_state()
-    ok("high trust + rich contexts → deeply-embedded",
+    tr.ok("high trust + rich contexts → deeply-embedded",
        "deeply-embedded" in state or "active-trusted" in state)
 
     a_fringe = SwarmAgent("agent-fringe")
     a_fringe.receive_assessment(0.2)
     a_fringe.interact("x", 0.3)
-    ok("low trust + interactions → distrusted-fringe",
+    tr.ok("low trust + interactions → distrusted-fringe",
        "distrusted" in a_fringe.qualitative_state())
 
     # 3. Activity rhythm
     print("\n[3] Activity rhythm")
     a = SwarmAgent("rhythm-test")
-    ok("no activity → silent", a.activity_rhythm == "silent")
+    tr.ok("no activity → silent", a.activity_rhythm == "silent")
     a.interact("x", 0.5)  # tick 0
-    ok("single pulse", a.activity_rhythm == "single-pulse")
+    tr.ok("single pulse", a.activity_rhythm == "single-pulse")
     # Regular rhythm: interact every 2 ticks
     a2 = SwarmAgent("regular")
     for _ in range(10):
         a2.interact("x", 0.5)
-    ok("uniform timing → regular-rhythm", a2.activity_rhythm == "regular-rhythm")
+    tr.ok("uniform timing → regular-rhythm", a2.activity_rhythm == "regular-rhythm")
 
     # 4. Context network density
     print("\n[4] SwarmContext density")
@@ -611,7 +601,7 @@ def _run_tests() -> bool:
     ctx.record_interaction("a", "b", 0.7)
     ctx.record_interaction("a", "c", 0.7)
     # 3 agents, 2 directed edges, possible=6, density=2/6≈0.33
-    ok("density≈0.33", abs(ctx.network_density - 2/6) < 0.01)
+    tr.ok("density≈0.33", abs(ctx.network_density - 2/6) < 0.01)
 
     # 5. Edge reinforcement
     print("\n[5] Edge reinforcement")
@@ -621,14 +611,14 @@ def _run_tests() -> bool:
     for _ in range(5):
         ctx.record_interaction("a", "b", 0.9)
     edge = ctx._edge_table[("a", "b")]
-    ok("edge interaction_count=5", edge.interaction_count == 5)
-    ok("edge weight > initial 0.5", edge.weight > 0.5)
+    tr.ok("edge interaction_count=5", edge.interaction_count == 5)
+    tr.ok("edge weight > initial 0.5", edge.weight > 0.5)
 
     # 6. Edge decay
     print("\n[6] Edge decay")
     edge = MeshEdge("x", "y", weight=1.0)
     edge.decay(factor=0.5)
-    ok("decay halves weight", abs(edge.weight - 0.5) < 0.001)
+    tr.ok("decay halves weight", abs(edge.weight - 0.5) < 0.001)
 
     # 7. Collective governance score
     print("\n[7] Collective governance score")
@@ -641,24 +631,24 @@ def _run_tests() -> bool:
             if i != j:
                 ctx.record_interaction(f"a{i}", f"a{j}", 0.8)
     score = ctx.collective_governance_score()
-    ok("fully-connected → score>=0.7", score >= 0.7)
-    ok("verdict affirm for high score",
+    tr.ok("fully-connected → score>=0.7", score >= 0.7)
+    tr.ok("verdict affirm for high score",
        "affirm" in ctx.qualitative_governance_verdict())
 
     # 8. Empty context verdict
     print("\n[8] Empty context verdict")
     ctx = SwarmContext("empty-ctx")
-    ok("unactivated verdict", "gather" in ctx.qualitative_governance_verdict())
+    tr.ok("unactivated verdict", "gather" in ctx.qualitative_governance_verdict())
 
     # 9. Federation swarm_interact
     print("\n[9] Federation swarm_interact")
     fed = SwarmMeshFederation("fed-001")
     fed.swarm_interact("alice", "bob", "project-alpha", 0.8)
-    ok("alice created", fed.get_agent("alice") is not None)
-    ok("bob created", fed.get_agent("bob") is not None)
-    ok("context created", fed.get_context("project-alpha") is not None)
-    ok("alice in context", "project-alpha" in fed.get_agent("alice")._context_membership)
-    ok("context has 1 interaction", fed.get_context("project-alpha").total_interactions == 1)
+    tr.ok("alice created", fed.get_agent("alice") is not None)
+    tr.ok("bob created", fed.get_agent("bob") is not None)
+    tr.ok("context created", fed.get_context("project-alpha") is not None)
+    tr.ok("alice in context", "project-alpha" in fed.get_agent("alice")._context_membership)
+    tr.ok("context has 1 interaction", fed.get_context("project-alpha").total_interactions == 1)
 
     # 10. Federation governance narrative
     print("\n[10] Federation governance narrative")
@@ -670,44 +660,44 @@ def _run_tests() -> bool:
             if other != ag:
                 fed.swarm_interact(ag, other, "main-ctx", 0.8)
     narrative = fed.federation_governance_narrative()
-    ok("narrative non-empty", len(narrative) > 20)
-    ok("narrative has verdict", "VERDICT" in narrative)
-    ok("narrative includes federation id", "fed-002" in narrative)
+    tr.ok("narrative non-empty", len(narrative) > 20)
+    tr.ok("narrative has verdict", "VERDICT" in narrative)
+    tr.ok("narrative includes federation id", "fed-002" in narrative)
 
     # 11. Meta swarm pattern
     print("\n[11] Meta swarm pattern")
     fed = SwarmMeshFederation("fed-003")
-    ok("no contexts → pre-emergent", fed.meta_swarm_pattern() == "pre-emergent")
+    tr.ok("no contexts → pre-emergent", fed.meta_swarm_pattern() == "pre-emergent")
     for i in range(4):
         for j in range(4):
             if i != j:
                 fed.swarm_interact(f"a{i}", f"a{j}", "dense-ctx", 0.9)
     pattern = fed.meta_swarm_pattern()
-    ok("dense context → tightly-integrated pattern",
+    tr.ok("dense context → tightly-integrated pattern",
        "tightly-integrated" in pattern or "moderately" in pattern)
 
     # 12. Peer trust assessment
     print("\n[12] Peer trust score")
     a = SwarmAgent("trust-test")
-    ok("no assessments → 0.5", a.peer_trust_score == 0.5)
+    tr.ok("no assessments → 0.5", a.peer_trust_score == 0.5)
     for _ in range(10):
         a.receive_assessment(0.9)
-    ok("high assessments → score>=0.85", a.peer_trust_score >= 0.85)
+    tr.ok("high assessments → score>=0.85", a.peer_trust_score >= 0.85)
 
     # 13. Context membership partial
     print("\n[13] Partial context membership")
     a = SwarmAgent("partial-member")
     a.join_context("ctx-a", degree=0.3)
     a.join_context("ctx-b", degree=0.7)
-    ok("2 contexts", a.n_contexts == 2)
-    ok("richness=(0.3+0.7)/2=0.5", abs(a.context_richness - 0.5) < 0.001)
+    tr.ok("2 contexts", a.n_contexts == 2)
+    tr.ok("richness=(0.3+0.7)/2=0.5", abs(a.context_richness - 0.5) < 0.001)
 
     # 14. leave_context decays membership
     print("\n[14] Leave context decays membership")
     a = SwarmAgent("leaver")
     a.join_context("ctx", degree=1.0)
     a.leave_context("ctx", decay=0.5)
-    ok("membership decayed to 0.5", abs(a._context_membership["ctx"] - 0.5) < 0.001)
+    tr.ok("membership decayed to 0.5", abs(a._context_membership["ctx"] - 0.5) < 0.001)
 
     # 15. Dominant roles in federation
     print("\n[15] Dominant roles")
@@ -718,7 +708,7 @@ def _run_tests() -> bool:
         for j in range(5):
             fed.get_agent(f"hub{i}").interact(f"peer{j}", 0.8)
     roles = fed._dominant_roles()
-    ok("hub-connector is dominant", any("hub" in r or "participant" in r for r in roles))
+    tr.ok("hub-connector is dominant", any("hub" in r or "participant" in r for r in roles))
 
     # 16. No enum classes in module
     print("\n[16] Anti-ontological: no Enum classes defined")
@@ -729,7 +719,7 @@ def _run_tests() -> bool:
         inspect.isclass(obj) and issubclass(obj, _Enum) and obj is not _Enum
         for name, obj in inspect.getmembers(module)
     )
-    ok("module defines no Enum subclasses", not has_enums)
+    tr.ok("module defines no Enum subclasses", not has_enums)
 
     # 17. Total interactions count
     print("\n[17] Total interactions count")
@@ -737,15 +727,9 @@ def _run_tests() -> bool:
     fed.swarm_interact("a", "b", "c1", 0.5)
     fed.swarm_interact("a", "c", "c1", 0.5)
     fed.swarm_interact("b", "c", "c2", 0.5)
-    ok("total interactions=3", fed.total_interactions() == 3)
+    tr.ok("total interactions=3", fed.total_interactions() == 3)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

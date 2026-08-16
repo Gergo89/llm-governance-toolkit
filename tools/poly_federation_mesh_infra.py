@@ -46,6 +46,7 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -610,124 +611,109 @@ def degraded_signal(signal_id: str = "degraded") -> PolyFedSignal:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== poly_federation_mesh_infra tests (6-Ω) ===\n")
+    tr = TestRunner('poly_federation_mesh_infra  —  unit tests')
+    tr.header()
 
     # 1. Healthy signal → AFFIRM or SCRUTINISE, binding ≥ 4
     dec = analyse_poly_federation(healthy_signal())
-    check("healthy: high binding (≥4)", dec.binding_level >= 4)
-    check("healthy: AFFIRM or SCRUTINISE",
+    tr.ok("healthy: high binding (≥4)", dec.binding_level >= 4)
+    tr.ok("healthy: AFFIRM or SCRUTINISE",
           dec.verdict in (PolyFedVerdict.POLYFED_AFFIRM, PolyFedVerdict.POLYFED_SCRUTINISE))
 
     # 2. Degraded signal → WITHHOLD or VOID, binding ≤ 3
     dec = analyse_poly_federation(degraded_signal())
-    check("degraded: low binding (≤3)", dec.binding_level <= 3)
-    check("degraded: WITHHOLD or VOID",
+    tr.ok("degraded: low binding (≤3)", dec.binding_level <= 3)
+    tr.ok("degraded: WITHHOLD or VOID",
           dec.verdict in (PolyFedVerdict.POLYFED_WITHHOLD, PolyFedVerdict.POLYFED_VOID))
 
     # 3. Six Ω-assessments always produced
     dec = analyse_poly_federation(healthy_signal())
-    check("6 omega assessments", len(dec.omega_assessments) == 6)
+    tr.ok("6 omega assessments", len(dec.omega_assessments) == 6)
 
     # 4. Topology weights sum to ~1.0
     dec = analyse_poly_federation(healthy_signal())
     total_w = sum(dec.topology_weights.values())
-    check("weights sum to 1.0", abs(total_w - 1.0) < 1e-9)
+    tr.ok("weights sum to 1.0", abs(total_w - 1.0) < 1e-9)
 
     # 5. All six Ω-modes present in assessments
     modes_present = {a.mode for a in dec.omega_assessments}
-    check("all 6 Ω-modes present", modes_present == set(OmegaMode))
+    tr.ok("all 6 Ω-modes present", modes_present == set(OmegaMode))
 
     # 6. All weights ≥ 0.05 (minimum guaranteed)
     min_w = min(dec.topology_weights.values())
-    check("all weights ≥ 0.05", min_w >= 0.049)   # small float tolerance
+    tr.ok("all weights ≥ 0.05", min_w >= 0.049)   # small float tolerance
 
     # 7. Binding always in [1, 5]
     for i, sig in enumerate([healthy_signal(), degraded_signal()]):
         d = analyse_poly_federation(sig)
-        check(f"binding in [1,5] for signal {i}", 1 <= d.binding_level <= 5)
+        tr.ok(f"binding in [1,5] for signal {i}", 1 <= d.binding_level <= 5)
 
     # 8. Different entropy seeds → different weight vectors
     w1 = _derive_weights(0.1)
     w2 = _derive_weights(0.9)
-    check("different seeds → different weights",
+    tr.ok("different seeds → different weights",
           any(abs(w1[m] - w2[m]) > 1e-6 for m in OmegaMode))
 
     # 9. Entropy seed = 0.0 → valid weights
     w = _derive_weights(0.0)
-    check("seed=0 → valid weights", abs(sum(w.values()) - 1.0) < 1e-9)
+    tr.ok("seed=0 → valid weights", abs(sum(w.values()) - 1.0) < 1e-9)
 
     # 10. Conflict: all bindings identical → UNANIMOUS
     conflict, agreeing = _assess_conflict([4, 4, 4, 4, 4, 4])
-    check("identical bindings → UNANIMOUS", conflict == TopologyConflict.UNANIMOUS)
-    check("unanimous: 6 agreeing", agreeing == 6)
+    tr.ok("identical bindings → UNANIMOUS", conflict == TopologyConflict.UNANIMOUS)
+    tr.ok("unanimous: 6 agreeing", agreeing == 6)
 
     # 11. Conflict: maximally spread [1,1,3,3,5,5] → SPLIT or CONTESTED
     conflict, agreeing = _assess_conflict([1, 1, 3, 3, 5, 5])
-    check("spread bindings → SPLIT or CONTESTED",
+    tr.ok("spread bindings → SPLIT or CONTESTED",
           conflict in (TopologyConflict.SPLIT, TopologyConflict.CONTESTED))
 
     # 12. Conflict: all different [1,2,3,4,5,5] → not UNANIMOUS
     conflict, _ = _assess_conflict([1, 2, 3, 4, 5, 5])
-    check("diverse bindings → not UNANIMOUS",
+    tr.ok("diverse bindings → not UNANIMOUS",
           conflict != TopologyConflict.UNANIMOUS)
 
     # 13. Surface audit: all healthy → CLEAN
     decisions = [analyse_poly_federation(healthy_signal(f"h{i}")) for i in range(5)]
     audit = audit_poly_fed_surface(decisions)
-    check("all healthy surface → CLEAN or CONTESTED",
+    tr.ok("all healthy surface → CLEAN or CONTESTED",
           audit.surface_verdict in (PolyFedSurface.POLYFED_CLEAN, PolyFedSurface.POLYFED_CONTESTED))
 
     # 14. Surface audit: all degraded → DEGRADED or COMPROMISED
     decisions = [analyse_poly_federation(degraded_signal(f"d{i}")) for i in range(5)]
     audit = audit_poly_fed_surface(decisions)
-    check("all degraded surface → DEGRADED or COMPROMISED",
+    tr.ok("all degraded surface → DEGRADED or COMPROMISED",
           audit.surface_verdict in (PolyFedSurface.POLYFED_DEGRADED,
                                     PolyFedSurface.POLYFED_COMPROMISED))
 
     # 15. Empty surface audit
     audit = audit_poly_fed_surface([])
-    check("empty surface → CLEAN", audit.surface_verdict == PolyFedSurface.POLYFED_CLEAN)
-    check("empty surface → total 0", audit.total_signals == 0)
+    tr.ok("empty surface → CLEAN", audit.surface_verdict == PolyFedSurface.POLYFED_CLEAN)
+    tr.ok("empty surface → total 0", audit.total_signals == 0)
 
     # 16. Summary is non-empty string
     dec = analyse_poly_federation(healthy_signal())
-    check("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
+    tr.ok("summary non-empty", isinstance(dec.summary, str) and len(dec.summary) > 0)
 
     # 17. Governance action non-empty
     audit = audit_poly_fed_surface([analyse_poly_federation(healthy_signal())])
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
     # 18. MESH assessment: zero nodes → binding 1
     b, _ = _assess_mesh(0, 3.0, 0.5)
-    check("mesh: 0 nodes → binding 1", b == 1)
+    tr.ok("mesh: 0 nodes → binding 1", b == 1)
 
     # 19. FRACTAL: zero depth → very low binding
     b, _ = _assess_fractal(0, 4.0, 0.9)
-    check("fractal: depth 0 → binding ≤ 3", b <= 3)
+    tr.ok("fractal: depth 0 → binding ≤ 3", b <= 3)
 
     # 20. HYPERCUBE: d=6 (64 nodes) → high binding when coverage is high
     b, _ = _assess_hypercube(6, 4.5, 0.99)
-    check("hypercube: d=6, high coverage → binding ≥ 3", b >= 3)
+    tr.ok("hypercube: d=6, high coverage → binding ≥ 3", b >= 3)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

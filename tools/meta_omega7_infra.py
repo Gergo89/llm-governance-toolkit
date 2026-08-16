@@ -75,6 +75,8 @@ _here = os.path.dirname(os.path.abspath(__file__))
 if _here not in sys.path:
     sys.path.insert(0, _here)
 
+from governance_core import TestRunner
+
 from poly_federation_mesh_infra import (  # noqa: E402
     OmegaMode,
     OmegaAssessment,
@@ -634,17 +636,8 @@ def volatile_meta_signal(
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
+    tr = TestRunner('meta_omega7_infra  —  unit tests')
+    tr.header()
 
     print("=== meta_omega7_infra tests (7-Ω META_RANDOM) ===\n")
 
@@ -652,38 +645,38 @@ def _run_tests() -> None:
 
     # T1-2: healthy → high binding + AFFIRM/SCRUTINISE
     dec = analyse_meta_omega7(healthy_meta_signal())
-    check("healthy: binding ≥ 4", dec.final_binding >= 4)
-    check("healthy: AFFIRM or SCRUTINISE",
+    tr.ok("healthy: binding ≥ 4", dec.final_binding >= 4)
+    tr.ok("healthy: AFFIRM or SCRUTINISE",
           dec.verdict in (MetaOmegaVerdict.META_AFFIRM, MetaOmegaVerdict.META_SCRUTINISE))
 
     # T3-4: degraded → low binding + WITHHOLD/VOID/GATHER
     dec = analyse_meta_omega7(degraded_meta_signal())
-    check("degraded: binding ≤ 3", dec.final_binding <= 3)
-    check("degraded: WITHHOLD/VOID/GATHER",
+    tr.ok("degraded: binding ≤ 3", dec.final_binding <= 3)
+    tr.ok("degraded: WITHHOLD/VOID/GATHER",
           dec.verdict in (MetaOmegaVerdict.META_WITHHOLD, MetaOmegaVerdict.META_VOID,
                           MetaOmegaVerdict.META_GATHER))
 
     # T5-7: final binding always in [1, 5]
     for sig in [healthy_meta_signal(), degraded_meta_signal(), volatile_meta_signal()]:
         dec = analyse_meta_omega7(sig)
-        check(f"binding in [1,5] — {sig.signal_id}", 1 <= dec.final_binding <= 5)
+        tr.ok(f"binding in [1,5] — {sig.signal_id}", 1 <= dec.final_binding <= 5)
 
     # ---- Ω7 weight properties --------------------------------------------
 
     # T8-10: meta-weights
     dec = analyse_meta_omega7(healthy_meta_signal())
     mw  = dec.meta_assessment.meta_weights
-    check("meta_weights sum ≈ 1.0", abs(sum(mw.values()) - 1.0) < 1e-9)
-    check("all meta_weights ≥ 0.05", min(mw.values()) >= 0.049)
-    check("meta_weights covers all 6 Ω-modes", set(mw.keys()) == set(OmegaMode))
+    tr.ok("meta_weights sum ≈ 1.0", abs(sum(mw.values()) - 1.0) < 1e-9)
+    tr.ok("all meta_weights ≥ 0.05", min(mw.values()) >= 0.049)
+    tr.ok("meta_weights covers all 6 Ω-modes", set(mw.keys()) == set(OmegaMode))
 
     # T11-12: different cycles → different weights and seed₂
     d1 = analyse_meta_omega7(healthy_meta_signal(cycle_index=1))
     d2 = analyse_meta_omega7(healthy_meta_signal(cycle_index=2))
-    check("different cycles → different meta-weights",
+    tr.ok("different cycles → different meta-weights",
           any(abs(d1.meta_assessment.meta_weights[m] -
                   d2.meta_assessment.meta_weights[m]) > 1e-6 for m in OmegaMode))
-    check("different cycles → different seed₂",
+    tr.ok("different cycles → different seed₂",
           abs(d1.meta_assessment.second_order_seed -
               d2.meta_assessment.second_order_seed) > 1e-9)
 
@@ -691,31 +684,31 @@ def _run_tests() -> None:
 
     # T13: blend weight in [META_BLEND_MIN, META_BLEND_MAX]
     dec = analyse_meta_omega7(healthy_meta_signal())
-    check("blend_weight ∈ [0.10, 0.40]",
+    tr.ok("blend_weight ∈ [0.10, 0.40]",
           _META_BLEND_MIN <= dec.meta_blend_weight <= _META_BLEND_MAX)
 
     # T14: low volatility ≤ high volatility blend weight
     bw_low  = _meta_blend_weight(0.0)
     bw_high = _meta_blend_weight(1.0)
-    check("volatility=0 → META_BLEND_MIN", abs(bw_low  - _META_BLEND_MIN) < 1e-9)
-    check("volatility=1 → META_BLEND_MAX", abs(bw_high - _META_BLEND_MAX) < 1e-9)
+    tr.ok("volatility=0 → META_BLEND_MIN", abs(bw_low  - _META_BLEND_MIN) < 1e-9)
+    tr.ok("volatility=1 → META_BLEND_MAX", abs(bw_high - _META_BLEND_MAX) < 1e-9)
 
     # ---- decision structure ----------------------------------------------
 
     # T16: summary contains signal_id
     dec = analyse_meta_omega7(healthy_meta_signal("id_probe"))
-    check("summary contains signal_id", "id_probe" in dec.summary)
+    tr.ok("summary contains signal_id", "id_probe" in dec.summary)
 
     # T17: base_decision has exactly 6 Ω-assessments
-    check("base_decision: 6 assessments", len(dec.base_decision.omega_assessments) == 6)
+    tr.ok("base_decision: 6 assessments", len(dec.base_decision.omega_assessments) == 6)
 
     # T18: omega_bindings in MetaOmegaAssessment matches base assessments
     base_b = {a.mode: a.binding for a in dec.base_decision.omega_assessments}
-    check("omega_bindings match base assessments",
+    tr.ok("omega_bindings match base assessments",
           dec.meta_assessment.omega_bindings == base_b)
 
     # T19: dominant_mode is a valid OmegaMode
-    check("dominant_mode is OmegaMode",
+    tr.ok("dominant_mode is OmegaMode",
           isinstance(dec.meta_assessment.dominant_mode, OmegaMode))
 
     # ---- meta_binding range ----------------------------------------------
@@ -724,17 +717,17 @@ def _run_tests() -> None:
     for sig in [healthy_meta_signal(), degraded_meta_signal(), volatile_meta_signal()]:
         dec = analyse_meta_omega7(sig)
         mb  = dec.meta_assessment.meta_binding
-        check(f"meta_binding ∈ [1,5] — {sig.signal_id}", 1.0 <= mb <= 5.0)
+        tr.ok(f"meta_binding ∈ [1,5] — {sig.signal_id}", 1.0 <= mb <= 5.0)
 
     # ---- divergence classification ---------------------------------------
 
     # T23-28: _meta_divergence boundary probes
-    check("Δ=0.0  → ALIGNED",    _meta_divergence(3.0, 3.0) == MetaDivergence.ALIGNED)
-    check("Δ=0.4  → ALIGNED",    _meta_divergence(3.0, 3.4) == MetaDivergence.ALIGNED)
-    check("Δ=0.8  → MINOR",      _meta_divergence(3.0, 3.8) == MetaDivergence.MINOR)
-    check("Δ=1.3  → MODERATE",   _meta_divergence(3.0, 4.3) == MetaDivergence.MODERATE)
-    check("Δ=2.0  → DIVERGENT",  _meta_divergence(3.0, 5.0) == MetaDivergence.DIVERGENT)
-    check("Δ=3.5  → INCOHERENT", _meta_divergence(1.0, 4.5) == MetaDivergence.INCOHERENT)
+    tr.ok("Δ=0.0  → ALIGNED",    _meta_divergence(3.0, 3.0) == MetaDivergence.ALIGNED)
+    tr.ok("Δ=0.4  → ALIGNED",    _meta_divergence(3.0, 3.4) == MetaDivergence.ALIGNED)
+    tr.ok("Δ=0.8  → MINOR",      _meta_divergence(3.0, 3.8) == MetaDivergence.MINOR)
+    tr.ok("Δ=1.3  → MODERATE",   _meta_divergence(3.0, 4.3) == MetaDivergence.MODERATE)
+    tr.ok("Δ=2.0  → DIVERGENT",  _meta_divergence(3.0, 5.0) == MetaDivergence.DIVERGENT)
+    tr.ok("Δ=3.5  → INCOHERENT", _meta_divergence(1.0, 4.5) == MetaDivergence.INCOHERENT)
 
     # ---- second-order seed -----------------------------------------------
 
@@ -742,78 +735,74 @@ def _run_tests() -> None:
     s1 = _second_order_seed(0.5, 1, 0.5)
     s2 = _second_order_seed(0.5, 2, 0.5)
     s3 = _second_order_seed(0.5, 3, 0.5)
-    check("seed: cycle1 ≠ cycle2", abs(s1 - s2) > 1e-9)
-    check("seed: cycle2 ≠ cycle3", abs(s2 - s3) > 1e-9)
-    check("seed: all finite and > 0",
+    tr.ok("seed: cycle1 ≠ cycle2", abs(s1 - s2) > 1e-9)
+    tr.ok("seed: cycle2 ≠ cycle3", abs(s2 - s3) > 1e-9)
+    tr.ok("seed: all finite and > 0",
           all(math.isfinite(s) and s > 0 for s in [s1, s2, s3]))
 
     # T32-33: non-finite seed1 → graceful output
-    check("seed: NaN input → finite", math.isfinite(_second_order_seed(float("nan"), 1, 0.5)))
-    check("seed: Inf input → finite", math.isfinite(_second_order_seed(float("inf"), 1, 0.5)))
+    tr.ok("seed: NaN input → finite", math.isfinite(_second_order_seed(float("nan"), 1, 0.5)))
+    tr.ok("seed: Inf input → finite", math.isfinite(_second_order_seed(float("inf"), 1, 0.5)))
 
     # ---- surface audit ---------------------------------------------------
 
     # T34: all healthy → META_CLEAN or META_CONTESTED
     decs = [analyse_meta_omega7(healthy_meta_signal(f"h{i}", i + 1)) for i in range(5)]
     audit = audit_meta_omega7_surface(decs)
-    check("healthy surface → CLEAN or CONTESTED",
+    tr.ok("healthy surface → CLEAN or CONTESTED",
           audit.surface_verdict in (MetaOmegaSurface.META_CLEAN,
                                     MetaOmegaSurface.META_CONTESTED))
 
     # T35: all degraded → META_DEGRADED or META_COMPROMISED
     decs = [analyse_meta_omega7(degraded_meta_signal(f"d{i}", i + 1)) for i in range(5)]
     audit = audit_meta_omega7_surface(decs)
-    check("degraded surface → DEGRADED or COMPROMISED",
+    tr.ok("degraded surface → DEGRADED or COMPROMISED",
           audit.surface_verdict in (MetaOmegaSurface.META_DEGRADED,
                                     MetaOmegaSurface.META_COMPROMISED))
 
     # T36-37: empty surface audit
     audit = audit_meta_omega7_surface([])
-    check("empty surface → META_CLEAN",  audit.surface_verdict == MetaOmegaSurface.META_CLEAN)
-    check("empty surface → total = 0",   audit.total_signals == 0)
+    tr.ok("empty surface → META_CLEAN",  audit.surface_verdict == MetaOmegaSurface.META_CLEAN)
+    tr.ok("empty surface → total = 0",   audit.total_signals == 0)
 
     # T38-39: surface audit numeric sanity
     decs = [analyse_meta_omega7(volatile_meta_signal(f"vol{i}", i + 1)) for i in range(6)]
     audit = audit_meta_omega7_surface(decs)
-    check("penalty_rate ∈ [0, 1]",         0.0 <= audit.penalty_rate <= 1.0)
-    check("mean_divergence_delta ≥ 0",     audit.mean_divergence_delta >= 0.0)
+    tr.ok("penalty_rate ∈ [0, 1]",         0.0 <= audit.penalty_rate <= 1.0)
+    tr.ok("mean_divergence_delta ≥ 0",     audit.mean_divergence_delta >= 0.0)
 
     # ---- chain attestation -----------------------------------------------
 
     # T40: attested signal → final_binding ≥ non-attested
     sig_no  = MetaOmega7Signal("no_att",  3.0, chain_attested=False)
     sig_yes = MetaOmega7Signal("yes_att", 3.0, chain_attested=True)
-    check("attested ≥ non-attested binding",
+    tr.ok("attested ≥ non-attested binding",
           analyse_meta_omega7(sig_yes).final_binding
           >= analyse_meta_omega7(sig_no).final_binding)
 
     # T41: to_poly_fed preserves key fields
     sig = healthy_meta_signal("pfcheck")
     pf  = sig.to_poly_fed()
-    check("to_poly_fed: signal_id preserved",    pf.signal_id    == sig.signal_id)
-    check("to_poly_fed: mean_binding preserved", pf.mean_binding == sig.mean_binding)
+    tr.ok("to_poly_fed: signal_id preserved",    pf.signal_id    == sig.signal_id)
+    tr.ok("to_poly_fed: mean_binding preserved", pf.mean_binding == sig.mean_binding)
 
     # ---- verdict mapping -------------------------------------------------
 
     # T43-45: direct verdict mapping checks
-    check("binding=5 + ALIGNED → META_AFFIRM",
+    tr.ok("binding=5 + ALIGNED → META_AFFIRM",
           _verdict_from_binding(5, MetaDivergence.ALIGNED)   == MetaOmegaVerdict.META_AFFIRM)
-    check("binding=1 + any    → META_VOID",
+    tr.ok("binding=1 + any    → META_VOID",
           _verdict_from_binding(1, MetaDivergence.ALIGNED)   == MetaOmegaVerdict.META_VOID)
-    check("binding=3 + DIVERGENT → META_GATHER",
+    tr.ok("binding=3 + DIVERGENT → META_GATHER",
           _verdict_from_binding(3, MetaDivergence.DIVERGENT) == MetaOmegaVerdict.META_GATHER)
 
     # T46: governance_action non-empty
     audit = audit_meta_omega7_surface([analyse_meta_omega7(healthy_meta_signal())])
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
-    print(f"\n{'=' * 58}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

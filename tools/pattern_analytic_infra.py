@@ -39,6 +39,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── pattern types ────────────────────────────────────────────────────────────
@@ -485,20 +486,9 @@ def audit_pattern_surface(analyses: Sequence[PatternAnalysis]) -> PatternSurface
 # ─── tests ────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> bool:
-    passed = 0
-    failed = 0
 
-    def ok(name: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("pattern_analytic_infra.py — Test Suite")
-    print("=" * 62)
+    tr = TestRunner('pattern_analytic_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # 1. Strong trend
     print("\n[1] Strong upward trend")
@@ -506,9 +496,9 @@ def _run_tests() -> bool:
     stream = PatternStream("trend-up", vals)
     a = analyse_patterns(stream)
     trend_f = next((f for f in a.findings if f.pattern_type == PatternType.TRENDING), None)
-    ok("trend detected", trend_f is not None)
-    ok("trend STRONG", trend_f is not None and trend_f.strength == PatternStrength.STRONG)
-    ok("trend binding>=4", a.binding_level >= 4)
+    tr.ok("trend detected", trend_f is not None)
+    tr.ok("trend STRONG", trend_f is not None and trend_f.strength == PatternStrength.STRONG)
+    tr.ok("trend binding>=4", a.binding_level >= 4)
 
     # 2. No trend — flat
     print("\n[2] No trend — flat values")
@@ -516,7 +506,7 @@ def _run_tests() -> bool:
     stream = PatternStream("flat", vals)
     a = analyse_patterns(stream)
     trend_f = next((f for f in a.findings if f.pattern_type == PatternType.TRENDING), None)
-    ok("flat: trend ABSENT", trend_f is None or trend_f.strength == PatternStrength.ABSENT)
+    tr.ok("flat: trend ABSENT", trend_f is None or trend_f.strength == PatternStrength.ABSENT)
 
     # 3. Periodic signal
     print("\n[3] Periodic signal (regular gaps)")
@@ -524,7 +514,7 @@ def _run_tests() -> bool:
     stream = PatternStream("periodic", vals, event_times=tuple(5.0 for _ in range(10)))
     a = analyse_patterns(stream)
     period_f = next((f for f in a.findings if f.pattern_type == PatternType.PERIODIC), None)
-    ok("periodic detected", period_f is not None and period_f.strength != PatternStrength.ABSENT)
+    tr.ok("periodic detected", period_f is not None and period_f.strength != PatternStrength.ABSENT)
 
     # 4. Plateau
     print("\n[4] Plateau detection")
@@ -532,7 +522,7 @@ def _run_tests() -> bool:
     stream = PatternStream("plateau", vals)
     a = analyse_patterns(stream)
     plat_f = next((f for f in a.findings if f.pattern_type == PatternType.PLATEAU), None)
-    ok("plateau detected", plat_f is not None and plat_f.strength != PatternStrength.ABSENT)
+    tr.ok("plateau detected", plat_f is not None and plat_f.strength != PatternStrength.ABSENT)
 
     # 5. Burst
     print("\n[5] Burst detection")
@@ -540,8 +530,8 @@ def _run_tests() -> bool:
     stream = PatternStream("burst", vals)
     a = analyse_patterns(stream)
     burst_f = next((f for f in a.findings if f.pattern_type == PatternType.BURST), None)
-    ok("burst detected", burst_f is not None and burst_f.strength != PatternStrength.ABSENT)
-    ok("burst verdict=ALERT", a.verdict == PatternVerdict.PATTERN_ALERT)
+    tr.ok("burst detected", burst_f is not None and burst_f.strength != PatternStrength.ABSENT)
+    tr.ok("burst verdict=ALERT", a.verdict == PatternVerdict.PATTERN_ALERT)
 
     # 6. Outlier cluster
     print("\n[6] Outlier cluster")
@@ -550,7 +540,7 @@ def _run_tests() -> bool:
     stream = PatternStream("outlier-cluster", vals)
     a = analyse_patterns(stream)
     out_f = next((f for f in a.findings if f.pattern_type == PatternType.OUTLIER_CLUSTER), None)
-    ok("outlier cluster detected", out_f is not None and out_f.strength != PatternStrength.ABSENT)
+    tr.ok("outlier cluster detected", out_f is not None and out_f.strength != PatternStrength.ABSENT)
 
     # 7. Hierarchical pattern
     print("\n[7] Hierarchical pattern")
@@ -560,34 +550,34 @@ def _run_tests() -> bool:
     stream = PatternStream("hier", fine, sub_streams=(sub,))
     a = analyse_patterns(stream)
     hier_f = next((f for f in a.findings if f.pattern_type == PatternType.HIERARCHICAL), None)
-    ok("hierarchical detected", hier_f is not None and hier_f.strength != PatternStrength.ABSENT)
+    tr.ok("hierarchical detected", hier_f is not None and hier_f.strength != PatternStrength.ABSENT)
 
     # 8. Insufficient data
     print("\n[8] Insufficient data")
     stream = PatternStream("tiny", (1.0, 2.0))
     a = analyse_patterns(stream)
-    ok("tiny: verdict=GATHER", a.verdict == PatternVerdict.PATTERN_GATHER)
+    tr.ok("tiny: verdict=GATHER", a.verdict == PatternVerdict.PATTERN_GATHER)
 
     # 9. Analysis summary non-empty
     print("\n[9] Summary text")
     vals = tuple(float(i) for i in range(20))
     stream = PatternStream("summary-test", vals)
     a = analyse_patterns(stream)
-    ok("summary non-empty", len(a.summary) > 5)
+    tr.ok("summary non-empty", len(a.summary) > 5)
 
     # 10. No sub-streams → hierarchical ABSENT
     print("\n[10] No sub-streams → hierarchical absent")
     stream = PatternStream("no-sub", tuple(float(i) for i in range(10)))
     a = analyse_patterns(stream)
     hier_f = next((f for f in a.findings if f.pattern_type == PatternType.HIERARCHICAL), None)
-    ok("no sub → hier absent or not found", hier_f is None or hier_f.strength == PatternStrength.ABSENT)
+    tr.ok("no sub → hier absent or not found", hier_f is None or hier_f.strength == PatternStrength.ABSENT)
 
     # 11. Binding from strong trend
     print("\n[11] Strong trend → high binding")
     vals = tuple(float(i) for i in range(30))
     stream = PatternStream("trend-binding", vals)
     a = analyse_patterns(stream)
-    ok("strong trend → binding>=4", a.binding_level >= 4)
+    tr.ok("strong trend → binding>=4", a.binding_level >= 4)
 
     # 12. Surface audit
     print("\n[12] Surface audit")
@@ -598,9 +588,9 @@ def _run_tests() -> bool:
                         1, PatternVerdict.PATTERN_ALERT, ""),
     ]
     audit = audit_pattern_surface(analyses)
-    ok("audit: alert_count=1", audit.alert_count == 1)
-    ok("audit: affirm_count=1", audit.affirm_count == 1)
-    ok("audit: surface=IRREGULAR", audit.surface_verdict == PatternSurfaceVerdict.SURFACE_IRREGULAR)
+    tr.ok("audit: alert_count=1", audit.alert_count == 1)
+    tr.ok("audit: affirm_count=1", audit.affirm_count == 1)
+    tr.ok("audit: surface=IRREGULAR", audit.surface_verdict == PatternSurfaceVerdict.SURFACE_IRREGULAR)
 
     # 13. Surface audit — clean
     print("\n[13] Surface audit — clean")
@@ -609,28 +599,22 @@ def _run_tests() -> bool:
                         2, PatternVerdict.PATTERN_GATHER, ""),
     ]
     audit = audit_pattern_surface(analyses)
-    ok("gather only → CLEAN", audit.surface_verdict == PatternSurfaceVerdict.SURFACE_CLEAN)
+    tr.ok("gather only → CLEAN", audit.surface_verdict == PatternSurfaceVerdict.SURFACE_CLEAN)
 
     # 14. Pearl correlation
     print("\n[14] Pearson correlation")
     xs = [1.0, 2.0, 3.0, 4.0, 5.0]
-    ok("perfect correlation r=1.0", abs(_pearson_r(xs, xs) - 1.0) < 0.001)
+    tr.ok("perfect correlation r=1.0", abs(_pearson_r(xs, xs) - 1.0) < 0.001)
     ys = [5.0, 4.0, 3.0, 2.0, 1.0]
-    ok("anti-correlation r=-1.0", abs(_pearson_r(xs, ys) + 1.0) < 0.001)
+    tr.ok("anti-correlation r=-1.0", abs(_pearson_r(xs, ys) + 1.0) < 0.001)
 
     # 15. Mean and std
     print("\n[15] Statistics helpers")
     xs = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
-    ok("mean=5.0", abs(_mean(xs) - 5.0) < 0.001)
-    ok("std~2.0", abs(_std(xs) - 2.0) < 0.01)
+    tr.ok("mean=5.0", abs(_mean(xs) - 5.0) < 0.001)
+    tr.ok("std~2.0", abs(_std(xs) - 2.0) < 0.01)
 
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    return not tr.summary()
 
 
 if __name__ == "__main__":

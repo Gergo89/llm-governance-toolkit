@@ -55,6 +55,7 @@ import statistics
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -510,52 +511,41 @@ def infinite_regress_signal(signal_id: str = "inf_regress") -> MetaSingularOntol
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== meta_singular_math_ontology_infra tests ===\n")
+    tr = TestRunner('meta_singular_math_ontology_infra  —  unit tests')
+    tr.header()
 
     # T1-2: stable number → high binding + AFFIRM
     dec = assess_meta_singular_ontology(stable_number_signal())
-    check("stable: binding ≥ 4", dec.binding_level >= 4)
-    check("stable: AFFIRM",
+    tr.ok("stable: binding ≥ 4", dec.binding_level >= 4)
+    tr.ok("stable: AFFIRM",
           dec.verdict == MetaSingularVerdict.ONTOLOGY_AFFIRM)
 
     # T3: Gödel signal → GATHER verdict
     dec = assess_meta_singular_ontology(godel_signal())
-    check("godel: GATHER verdict", dec.verdict == MetaSingularVerdict.ONTOLOGY_GATHER)
-    check("godel: godel_capped=True", dec.godel_capped)
+    tr.ok("godel: GATHER verdict", dec.verdict == MetaSingularVerdict.ONTOLOGY_GATHER)
+    tr.ok("godel: godel_capped=True", dec.godel_capped)
 
     # T5-6: infinite regress → binding=1 + VOID
     dec = assess_meta_singular_ontology(infinite_regress_signal())
-    check("inf_regress: binding=1",  dec.binding_level == 1)
-    check("inf_regress: VOID",       dec.verdict == MetaSingularVerdict.ONTOLOGY_VOID)
+    tr.ok("inf_regress: binding=1",  dec.binding_level == 1)
+    tr.ok("inf_regress: VOID",       dec.verdict == MetaSingularVerdict.ONTOLOGY_VOID)
 
     # T7: meta-singular → ceiling ≤ 2
     dec = assess_meta_singular_ontology(meta_singular_signal())
-    check("meta_singular: ceiling ≤ 2", dec.effective_ceiling <= 2)
+    tr.ok("meta_singular: ceiling ≤ 2", dec.effective_ceiling <= 2)
 
     # T8: binding always in [1, 5]
     for sig in [stable_number_signal(), godel_signal(),
                 meta_singular_signal(), infinite_regress_signal()]:
         dec = assess_meta_singular_ontology(sig)
-        check(f"binding in [1,5] — {sig.signal_id}", 1 <= dec.binding_level <= 5)
+        tr.ok(f"binding in [1,5] — {sig.signal_id}", 1 <= dec.binding_level <= 5)
 
     # T9: CATEGORY class ceiling = 3
     sig = MetaSingularOntologySignal("cat_stable", MathOntologyClass.CATEGORY,
                                      OntologicalTransition.STABLE,
                                      categorical_coherence=1.0, chain_attested=True)
     dec = assess_meta_singular_ontology(sig)
-    check("CATEGORY ceiling = 3", dec.binding_level <= 3)
+    tr.ok("CATEGORY ceiling = 3", dec.binding_level <= 3)
 
     # T10: meta_level=3 → meta_capped and ceiling ≤ 2
     sig = MetaSingularOntologySignal("ml3", MathOntologyClass.NUMBER,
@@ -563,15 +553,15 @@ def _run_tests() -> None:
                                      categorical_coherence=1.0, meta_level=3,
                                      chain_attested=True)
     dec = assess_meta_singular_ontology(sig)
-    check("meta_level=3: meta_capped", dec.meta_capped)
-    check("meta_level=3: ceiling ≤ 2", dec.effective_ceiling <= 2)
+    tr.ok("meta_level=3: meta_capped", dec.meta_capped)
+    tr.ok("meta_level=3: ceiling ≤ 2", dec.effective_ceiling <= 2)
 
     # T11: omega entropy degradation grows with entropy_index
     deg_low  = _omega_degradation(8)    # at cap — no degradation
     deg_high = _omega_degradation(20)   # 12 bits past cap
-    check("omega: at cap → no degradation", deg_low == 0.0)
-    check("omega: past cap → degradation > 0", deg_high > 0.0)
-    check("omega: higher index → more degradation", deg_high > _omega_degradation(12))
+    tr.ok("omega: at cap → no degradation", deg_low == 0.0)
+    tr.ok("omega: past cap → degradation > 0", deg_high > 0.0)
+    tr.ok("omega: higher index → more degradation", deg_high > _omega_degradation(12))
 
     # T13: high entropy_index degrades binding vs low entropy_index
     sig_lo = MetaSingularOntologySignal("ent_lo", MathOntologyClass.FUNCTION,
@@ -580,7 +570,7 @@ def _run_tests() -> None:
     sig_hi = MetaSingularOntologySignal("ent_hi", MathOntologyClass.FUNCTION,
                                         OntologicalTransition.STABLE,
                                         categorical_coherence=0.9, entropy_index=30)
-    check("high entropy_index degrades binding",
+    tr.ok("high entropy_index degrades binding",
           assess_meta_singular_ontology(sig_hi).binding_level
           <= assess_meta_singular_ontology(sig_lo).binding_level)
 
@@ -591,7 +581,7 @@ def _run_tests() -> None:
     sig_yes = MetaSingularOntologySignal("att_yes", MathOntologyClass.NUMBER,
                                          OntologicalTransition.STABLE,
                                          categorical_coherence=0.7, chain_attested=True)
-    check("chain_attested bumps binding",
+    tr.ok("chain_attested bumps binding",
           assess_meta_singular_ontology(sig_yes).binding_level
           >= assess_meta_singular_ontology(sig_no).binding_level)
 
@@ -600,58 +590,58 @@ def _run_tests() -> None:
                                      OntologicalTransition.CAT_DISSOLUTION,
                                      categorical_coherence=1.0, chain_attested=True)
     dec = assess_meta_singular_ontology(sig)
-    check("CAT_DISSOLUTION: ceiling=2", dec.effective_ceiling == 2)
+    tr.ok("CAT_DISSOLUTION: ceiling=2", dec.effective_ceiling == 2)
 
     # T16: SINGULAR_XITION ceiling = 3
     sig = MetaSingularOntologySignal("singx", MathOntologyClass.FUNCTION,
                                      OntologicalTransition.SINGULAR_XITION,
                                      categorical_coherence=1.0)
     dec = assess_meta_singular_ontology(sig)
-    check("SINGULAR_XITION: ceiling ≤ 3", dec.effective_ceiling <= 3)
+    tr.ok("SINGULAR_XITION: ceiling ≤ 3", dec.effective_ceiling <= 3)
 
     # T17-18: surface audit — stable signals → CLEAN or SHIFTING
     decs = [assess_meta_singular_ontology(stable_number_signal(f"s{i}")) for i in range(5)]
     audit = audit_meta_singular_surface(decs)
-    check("stable surface → CLEAN or SHIFTING",
+    tr.ok("stable surface → CLEAN or SHIFTING",
           audit.surface_verdict in (MetaSingularSurface.ONTOLOGY_CLEAN,
                                     MetaSingularSurface.ONTOLOGY_SHIFTING))
 
     # T19: surface audit — all regress → DISSOLVED or FRACTURED
     decs = [assess_meta_singular_ontology(infinite_regress_signal(f"r{i}")) for i in range(5)]
     audit = audit_meta_singular_surface(decs)
-    check("regress surface → DISSOLVED or FRACTURED",
+    tr.ok("regress surface → DISSOLVED or FRACTURED",
           audit.surface_verdict in (MetaSingularSurface.ONTOLOGY_DISSOLVED,
                                     MetaSingularSurface.ONTOLOGY_FRACTURED))
 
     # T20-21: empty surface audit
     audit = audit_meta_singular_surface([])
-    check("empty → CLEAN", audit.surface_verdict == MetaSingularSurface.ONTOLOGY_CLEAN)
-    check("empty → total=0", audit.total_signals == 0)
+    tr.ok("empty → CLEAN", audit.surface_verdict == MetaSingularSurface.ONTOLOGY_CLEAN)
+    tr.ok("empty → total=0", audit.total_signals == 0)
 
     # T22: godel_rate ∈ [0, 1]
     mixed = [assess_meta_singular_ontology(s) for s in
              [stable_number_signal(), godel_signal(), meta_singular_signal()]]
     audit = audit_meta_singular_surface(mixed)
-    check("godel_rate ∈ [0,1]", 0.0 <= audit.godel_rate <= 1.0)
+    tr.ok("godel_rate ∈ [0,1]", 0.0 <= audit.godel_rate <= 1.0)
 
     # T23: meta_singular_rate ∈ [0, 1]
-    check("meta_singular_rate ∈ [0,1]", 0.0 <= audit.meta_singular_rate <= 1.0)
+    tr.ok("meta_singular_rate ∈ [0,1]", 0.0 <= audit.meta_singular_rate <= 1.0)
 
     # T24: summary contains signal_id
     dec = assess_meta_singular_ontology(stable_number_signal("probe"))
-    check("summary contains signal_id", "probe" in dec.summary)
+    tr.ok("summary contains signal_id", "probe" in dec.summary)
 
     # T25: notes non-empty
-    check("notes non-empty", len(dec.notes) > 0)
+    tr.ok("notes non-empty", len(dec.notes) > 0)
 
     # T26: governance_action non-empty
     audit = audit_meta_singular_surface([assess_meta_singular_ontology(stable_number_signal())])
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(audit.governance_action, str) and len(audit.governance_action) > 0)
 
     # T27: Gödel ceiling overrides class ceiling for SET
     dec = assess_meta_singular_ontology(godel_signal())
-    check("godel ceiling ≤ 3", dec.effective_ceiling <= _GODEL_CEILING)
+    tr.ok("godel ceiling ≤ 3", dec.effective_ceiling <= _GODEL_CEILING)
 
     # T28: transition_depth=1.0 at META_SINGULAR → binding ≤ 1
     sig = MetaSingularOntologySignal("ms_deep", MathOntologyClass.CATEGORY,
@@ -659,14 +649,10 @@ def _run_tests() -> None:
                                      categorical_coherence=0.05,
                                      transition_depth=1.0, meta_level=2)
     dec = assess_meta_singular_ontology(sig)
-    check("META_SINGULAR at full depth: binding ≤ 2", dec.binding_level <= 2)
+    tr.ok("META_SINGULAR at full depth: binding ≤ 2", dec.binding_level <= 2)
 
-    print(f"\n{'=' * 55}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

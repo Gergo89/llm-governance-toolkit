@@ -51,6 +51,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -170,22 +171,10 @@ _FIELD_SCRU_THRESH  = 0.30
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _safe_float(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
-def _clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
-
 def _pred_score(depth: int) -> float:
     """Normalise predictability depth to [0, 1] via logarithm."""
     d = max(0, depth)
-    return _clamp01(math.log1p(d) / math.log1p(_PRED_SATURATION))
+    return _c01(math.log1p(d) / math.log1p(_PRED_SATURATION))
 
 
 # ── Core assessment ───────────────────────────────────────────────────────────
@@ -209,12 +198,12 @@ def assess_determinism(signal: DeterminismSignal) -> DeterminismDecision:
     notes: list[str] = []
 
     cls   = signal.determinism_class
-    cc    = _clamp01(_safe_float(signal.causal_closure, 0.90))
-    er    = _clamp01(_safe_float(signal.entropy_rate, 0.05))
-    sc    = _clamp01(_safe_float(signal.state_coverage, 0.90))
+    cc    = _c01(_sf(signal.causal_closure, 0.90))
+    er    = _c01(_sf(signal.entropy_rate, 0.05))
+    sc    = _c01(_sf(signal.state_coverage, 0.90))
     depth = max(0, int(signal.predictability_depth)
                 if isinstance(signal.predictability_depth, int) else 10)
-    lyap  = _safe_float(signal.lyapunov_exponent, 0.0)
+    lyap  = _sf(signal.lyapunov_exponent, 0.0)
     orig  = signal.origin_trace
 
     # ── Undecidable short-circuit ─────────────────────────────────────────────
@@ -485,26 +474,13 @@ def undecidable_signal(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
 
-    passed = 0
-    failed = 0
 
-    def ok(label: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("determinism_infra  —  unit tests")
-    print(SEP)
+    tr = TestRunner('determinism_infra  —  unit tests')
+    tr.header()
 
     # ── Builder signals ──────────────────────────────────────────────────────
-    print("\n--- builder signals ---")
+    tr.section("builder signals")
     d_sc  = assess_determinism(strict_causal_signal("sc1"))
     d_pr  = assess_determinism(probabilistic_signal("pr1"))
     d_em  = assess_determinism(emergent_signal("em1"))
@@ -512,24 +488,24 @@ def _run_tests() -> None:
     d_qu  = assess_determinism(quantum_signal("qu1"))
     d_un  = assess_determinism(undecidable_signal("un1"))
 
-    ok("strict_causal: binding=5",     d_sc.binding == 5)
-    ok("strict_causal: ANCHOR",        d_sc.verdict == DeterminismVerdict.ANCHOR)
-    ok("probabilistic: binding≥3",     d_pr.binding >= 3)
-    ok("probabilistic: not VOID",      d_pr.verdict != DeterminismVerdict.VOID)
-    ok("emergent: binding in [3,4]",   3 <= d_em.binding <= 4)
-    ok("chaotic: binding in [1,3]",    1 <= d_ch.binding <= 3)
-    ok("quantum: binding ≤ 2",         d_qu.binding <= 2)
-    ok("undecidable: binding=1",       d_un.binding == 1)
-    ok("undecidable: VOID",            d_un.verdict == DeterminismVerdict.VOID)
+    tr.ok("strict_causal: binding=5",     d_sc.binding == 5)
+    tr.ok("strict_causal: ANCHOR",        d_sc.verdict == DeterminismVerdict.ANCHOR)
+    tr.ok("probabilistic: binding≥3",     d_pr.binding >= 3)
+    tr.ok("probabilistic: not VOID",      d_pr.verdict != DeterminismVerdict.VOID)
+    tr.ok("emergent: binding in [3,4]",   3 <= d_em.binding <= 4)
+    tr.ok("chaotic: binding in [1,3]",    1 <= d_ch.binding <= 3)
+    tr.ok("quantum: binding ≤ 2",         d_qu.binding <= 2)
+    tr.ok("undecidable: binding=1",       d_un.binding == 1)
+    tr.ok("undecidable: VOID",            d_un.verdict == DeterminismVerdict.VOID)
 
     # ── Ordering invariant ────────────────────────────────────────────────────
-    print("\n--- ordering invariant ---")
-    ok("strict_causal outbinds chaotic",    d_sc.binding >= d_ch.binding)
-    ok("chaotic outbinds undecidable",      d_ch.binding >= d_un.binding)
-    ok("probabilistic outbinds quantum",    d_pr.binding >= d_qu.binding)
+    tr.section("ordering invariant")
+    tr.ok("strict_causal outbinds chaotic",    d_sc.binding >= d_ch.binding)
+    tr.ok("chaotic outbinds undecidable",      d_ch.binding >= d_un.binding)
+    tr.ok("probabilistic outbinds quantum",    d_pr.binding >= d_qu.binding)
 
     # ── Causal closure modifier ───────────────────────────────────────────────
-    print("\n--- causal closure modifier ---")
+    tr.section("causal closure modifier")
     high_cc = assess_determinism(DeterminismSignal(
         claim_id="high_cc", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.99, predictability_depth=15,
@@ -540,11 +516,11 @@ def _run_tests() -> None:
         causal_closure=0.30, predictability_depth=15,
         state_coverage=0.95, entropy_rate=0.01,
     ))
-    ok("high causal_closure → binding ≥ low", high_cc.binding >= low_cc.binding)
-    ok("high cc → strong causal_strength",     high_cc.causal_strength >= 0.90)
+    tr.ok("high causal_closure → binding ≥ low", high_cc.binding >= low_cc.binding)
+    tr.ok("high cc → strong causal_strength",     high_cc.causal_strength >= 0.90)
 
     # ── Entropy degrades causal strength ─────────────────────────────────────
-    print("\n--- entropy degrades ---")
+    tr.section("entropy degrades")
     low_e = assess_determinism(DeterminismSignal(
         claim_id="low_e", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, entropy_rate=0.05,
@@ -553,11 +529,11 @@ def _run_tests() -> None:
         claim_id="high_e", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, entropy_rate=0.80,
     ))
-    ok("high entropy → lower causal_strength", high_e.causal_strength < low_e.causal_strength)
-    ok("high entropy → lower binding",         high_e.binding <= low_e.binding)
+    tr.ok("high entropy → lower causal_strength", high_e.causal_strength < low_e.causal_strength)
+    tr.ok("high entropy → lower binding",         high_e.binding <= low_e.binding)
 
     # ── Origin trace ──────────────────────────────────────────────────────────
-    print("\n--- origin trace (egy eredet) ---")
+    tr.section("origin trace (egy eredet)")
     single_origin = assess_determinism(DeterminismSignal(
         claim_id="single", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, predictability_depth=10,
@@ -568,9 +544,9 @@ def _run_tests() -> None:
         causal_closure=0.90, predictability_depth=10,
         origin_trace=OriginTrace.LOST,
     ))
-    ok("single origin outbinds lost",     single_origin.binding > lost_origin.binding)
-    ok("single: penalty=0.0",             single_origin.origin_penalty == 0.0)
-    ok("lost: penalty=1.5",               lost_origin.origin_penalty == 1.5)
+    tr.ok("single origin outbinds lost",     single_origin.binding > lost_origin.binding)
+    tr.ok("single: penalty=0.0",             single_origin.origin_penalty == 0.0)
+    tr.ok("lost: penalty=1.5",               lost_origin.origin_penalty == 1.5)
 
     circular_origin = assess_determinism(DeterminismSignal(
         claim_id="circ", determinism_class=DeterminismClass.PROBABILISTIC,
@@ -578,10 +554,10 @@ def _run_tests() -> None:
         origin_trace=OriginTrace.CIRCULAR,
         entropy_rate=0.50,
     ))
-    ok("circular + low binding → VOID",   circular_origin.verdict == DeterminismVerdict.VOID)
+    tr.ok("circular + low binding → VOID",   circular_origin.verdict == DeterminismVerdict.VOID)
 
     # ── Lyapunov correction ───────────────────────────────────────────────────
-    print("\n--- Lyapunov chaos correction ---")
+    tr.section("Lyapunov chaos correction")
     stable = assess_determinism(DeterminismSignal(
         claim_id="stable_lyap", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, predictability_depth=10,
@@ -592,12 +568,12 @@ def _run_tests() -> None:
         causal_closure=0.90, predictability_depth=10,
         lyapunov_exponent=1.5,   # positive Lyapunov → chaotic cap
     ))
-    ok("stable lyapunov (−1.0) → binding=5",      stable.binding == 5)
-    ok("chaotic lyapunov (+1.5) → binding < 5",   chaotic_lyap.binding < 5)
-    ok("chaotic lyapunov → capped at CHAOTIC=3",  chaotic_lyap.binding <= 3)
+    tr.ok("stable lyapunov (−1.0) → binding=5",      stable.binding == 5)
+    tr.ok("chaotic lyapunov (+1.5) → binding < 5",   chaotic_lyap.binding < 5)
+    tr.ok("chaotic lyapunov → capped at CHAOTIC=3",  chaotic_lyap.binding <= 3)
 
     # ── Predictability depth ──────────────────────────────────────────────────
-    print("\n--- predictability depth ---")
+    tr.section("predictability depth")
     deep = assess_determinism(DeterminismSignal(
         claim_id="deep", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, predictability_depth=100,
@@ -606,40 +582,40 @@ def _run_tests() -> None:
         claim_id="shallow", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, predictability_depth=0,
     ))
-    ok("deep pred → binding ≥ shallow",   deep.binding >= shallow.binding)
-    ok("depth=100 pred_score ≈ 1.0",      deep.predictability_score >= 0.90)
-    ok("depth=0 pred_score = 0.0",        shallow.predictability_score == 0.0)
+    tr.ok("deep pred → binding ≥ shallow",   deep.binding >= shallow.binding)
+    tr.ok("depth=100 pred_score ≈ 1.0",      deep.predictability_score >= 0.90)
+    tr.ok("depth=0 pred_score = 0.0",        shallow.predictability_score == 0.0)
 
     # ── Chain attestation ─────────────────────────────────────────────────────
-    print("\n--- chain attestation ---")
+    tr.section("chain attestation")
     no_chain = probabilistic_signal("no_ch")
     ch_chain = DeterminismSignal(**{**no_chain.__dict__, "chain_attested": True})
     d_no  = assess_determinism(no_chain)
     d_yes = assess_determinism(ch_chain)
-    ok("chain_attested → binding ≥ without", d_yes.binding >= d_no.binding)
+    tr.ok("chain_attested → binding ≥ without", d_yes.binding >= d_no.binding)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = audit_determinism_field([])
-    ok("empty → DETERMINED",             fa_empty.field_verdict == "DETERMINED")
-    ok("empty → mean_binding=5.0",       fa_empty.mean_binding  == 5.0)
+    tr.ok("empty → DETERMINED",             fa_empty.field_verdict == "DETERMINED")
+    tr.ok("empty → mean_binding=5.0",       fa_empty.mean_binding  == 5.0)
 
     # Strict-causal dominated field
     strict_ds = [assess_determinism(strict_causal_signal(f"SC{i}"))
                  for i in range(5)]
     fa_strict = audit_determinism_field(strict_ds)
-    ok("all strict_causal → DETERMINED", fa_strict.field_verdict == "DETERMINED")
-    ok("strict field → anchor_count=5",  fa_strict.anchor_count == 5)
+    tr.ok("all strict_causal → DETERMINED", fa_strict.field_verdict == "DETERMINED")
+    tr.ok("strict field → anchor_count=5",  fa_strict.anchor_count == 5)
 
     # Undecidable-heavy field
     undec_ds = [assess_determinism(undecidable_signal(f"UN{i}")) for i in range(4)]
     mixed_ds = [assess_determinism(chaotic_signal(f"CH{i}")) for i in range(4)]
     fa_und = audit_determinism_field(undec_ds + mixed_ds)
-    ok("many undecidable → UNDECIDABLE", fa_und.field_verdict == "UNDECIDABLE")
-    ok("undecidable → void_count=4",     fa_und.void_count == 4)
+    tr.ok("many undecidable → UNDECIDABLE", fa_und.field_verdict == "UNDECIDABLE")
+    tr.ok("undecidable → void_count=4",     fa_und.void_count == 4)
 
     # ── Sentinel & edge cases ─────────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     nan_sig = DeterminismSignal(
         claim_id="nan", determinism_class=DeterminismClass.STRICT_CAUSAL,
@@ -647,40 +623,33 @@ def _run_tests() -> None:
         lyapunov_exponent=float("inf"),
     )
     d_nan = assess_determinism(nan_sig)
-    ok("NaN/Inf inputs → valid binding",  1 <= d_nan.binding <= 5)
+    tr.ok("NaN/Inf inputs → valid binding",  1 <= d_nan.binding <= 5)
 
     neg_depth = DeterminismSignal(
         claim_id="neg_d", determinism_class=DeterminismClass.STRICT_CAUSAL,
         causal_closure=0.90, predictability_depth=-100,
     )
     d_neg = assess_determinism(neg_depth)
-    ok("negative depth → clamped to 0",  d_neg.predictability_score == 0.0)
-    ok("negative depth → valid binding",  1 <= d_neg.binding <= 5)
+    tr.ok("negative depth → clamped to 0",  d_neg.predictability_score == 0.0)
+    tr.ok("negative depth → valid binding",  1 <= d_neg.binding <= 5)
 
     idem_sig = strict_causal_signal("idem")
-    ok("idempotency",
+    tr.ok("idempotency",
        assess_determinism(idem_sig).binding == assess_determinism(idem_sig).binding)
 
     # ── "Everything is logical / there is structure" invariant ────────────────
-    print("\n--- structural invariant ---")
+    tr.section("structural invariant")
     # Even the most indeterminate system has binding ≥ 1 (there is always structure)
     extremes = [
         assess_determinism(undecidable_signal("ex1")),
         assess_determinism(quantum_signal("ex2")),
         assess_determinism(chaotic_signal("ex3", lyapunov_exponent=5.0)),
     ]
-    ok("all extremes: binding ≥ 1 (there is always structure)",
+    tr.ok("all extremes: binding ≥ 1 (there is always structure)",
        all(d.binding >= 1 for d in extremes))
 
     # Summary
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

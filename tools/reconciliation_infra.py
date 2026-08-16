@@ -42,6 +42,7 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ─── Enumerations ─────────────────────────────────────────────────────────────
@@ -594,23 +595,11 @@ def reconciling_signal(signal_id: str = "reconciling") -> ReconciliationSignal:
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    _pass = _fail = 0
-
-    def check(desc: str, cond: bool) -> None:
-        global _pass, _fail
-        if cond:
-            _pass += 1
-            print(f"  PASS  {desc}")
-        else:
-            _fail += 1
-            print(f"  FAIL  {desc}")
-
-    print("=" * 58)
-    print("reconciliation_infra  —  unit tests")
-    print("=" * 58)
+    tr = TestRunner("reconciliation_infra  —  unit tests")
+    tr.header()
 
     # ── Builder signals ───────────────────────────────────────────────────────
-    print("\n--- builder signals ---")
+    tr.section("builder signals")
     a_sig  = aligned_signal()
     c_sig  = contested_signal()
     ir_sig = irreconcilable_signal()
@@ -623,37 +612,37 @@ if __name__ == "__main__":
     ca_dec = reconcile(ca_sig)
     re_dec = reconcile(re_sig)
 
-    check("aligned: phase = ALIGNED",
+    tr.ok("aligned: phase = ALIGNED",
           a_dec.phase == ReconciliationPhase.ALIGNED)
-    check("aligned: binding ≥ 4",
+    tr.ok("aligned: binding ≥ 4",
           a_dec.binding_level >= 4)
-    check("aligned: RECONCILE_AFFIRM",
+    tr.ok("aligned: RECONCILE_AFFIRM",
           a_dec.verdict == ReconciliationVerdict.RECONCILE_AFFIRM)
 
-    check("contested: phase = CONTESTED",
+    tr.ok("contested: phase = CONTESTED",
           c_dec.phase == ReconciliationPhase.CONTESTED)
-    check("contested: binding ≤ 3",
+    tr.ok("contested: binding ≤ 3",
           c_dec.binding_level <= 3)
-    check("contested: not RECONCILE_AFFIRM",
+    tr.ok("contested: not RECONCILE_AFFIRM",
           c_dec.verdict != ReconciliationVerdict.RECONCILE_AFFIRM)
 
-    check("irreconcilable: phase = IRRECONCILABLE",
+    tr.ok("irreconcilable: phase = IRRECONCILABLE",
           ir_dec.phase == ReconciliationPhase.IRRECONCILABLE)
-    check("irreconcilable: binding = 1",
+    tr.ok("irreconcilable: binding = 1",
           ir_dec.binding_level == 1)
-    check("irreconcilable: VOID",
+    tr.ok("irreconcilable: VOID",
           ir_dec.verdict == ReconciliationVerdict.VOID)
 
-    check("cascading: binding ≤ 2  (CASCADING_CONFLICT cap)",
+    tr.ok("cascading: binding ≤ 2  (CASCADING_CONFLICT cap)",
           ca_dec.binding_level <= 2)
 
-    check("reconciling: phase = RECONCILING",
+    tr.ok("reconciling: phase = RECONCILING",
           re_dec.phase == ReconciliationPhase.RECONCILING)
-    check("reconciling: binding ≥ 3",
+    tr.ok("reconciling: binding ≥ 3",
           re_dec.binding_level >= 3)
 
     # ── Phase classification ──────────────────────────────────────────────────
-    print("\n--- phase classification ---")
+    tr.section("phase classification")
 
     def _phase(sev=0.10, agr=0.90, conf=0.80, depth=0,
                cls=ReconciliationClass.VERDICT_CONFLICT):
@@ -662,29 +651,29 @@ if __name__ == "__main__":
             resolution_confidence=conf, reconciliation_depth=depth)
         return reconcile(sig).phase
 
-    check("sev=0.91 → IRRECONCILABLE (severity threshold)",
+    tr.ok("sev=0.91 → IRRECONCILABLE (severity threshold)",
           _phase(sev=0.91) == ReconciliationPhase.IRRECONCILABLE)
-    check("sev=0.90 exactly → IRRECONCILABLE (≥ not >)",
+    tr.ok("sev=0.90 exactly → IRRECONCILABLE (≥ not >)",
           _phase(sev=0.90) == ReconciliationPhase.IRRECONCILABLE)
-    check("sev=0.89 → not IRRECONCILABLE",
+    tr.ok("sev=0.89 → not IRRECONCILABLE",
           _phase(sev=0.89) != ReconciliationPhase.IRRECONCILABLE)
-    check("depth=7 → IRRECONCILABLE (depth > 6)",
+    tr.ok("depth=7 → IRRECONCILABLE (depth > 6)",
           _phase(depth=7) == ReconciliationPhase.IRRECONCILABLE)
-    check("depth=2 + conf=0.15 → IRRECONCILABLE (low-conf at depth)",
+    tr.ok("depth=2 + conf=0.15 → IRRECONCILABLE (low-conf at depth)",
           _phase(depth=2, conf=0.15) == ReconciliationPhase.IRRECONCILABLE)
-    check("agr=0.90 + sev=0.05 → ALIGNED",
+    tr.ok("agr=0.90 + sev=0.05 → ALIGNED",
           _phase(agr=0.90, sev=0.05, depth=0) == ReconciliationPhase.ALIGNED)
-    check("agr=0.50 → CONTESTED",
+    tr.ok("agr=0.50 → CONTESTED",
           _phase(agr=0.50, sev=0.30, depth=0) == ReconciliationPhase.CONTESTED)
-    check("sev=0.70 → CONTESTED (high severity)",
+    tr.ok("sev=0.70 → CONTESTED (high severity)",
           _phase(sev=0.70, agr=0.80, depth=0) == ReconciliationPhase.CONTESTED)
-    check("depth=1 + conf=0.50 → RECONCILING",
+    tr.ok("depth=1 + conf=0.50 → RECONCILING",
           _phase(sev=0.30, agr=0.70, conf=0.50, depth=1) == ReconciliationPhase.RECONCILING)
-    check("agr=0.70 + sev=0.30 → DIVERGENT",
+    tr.ok("agr=0.70 + sev=0.30 → DIVERGENT",
           _phase(agr=0.70, sev=0.30, depth=0) == ReconciliationPhase.DIVERGENT)
 
     # ── Binding invariants ────────────────────────────────────────────────────
-    print("\n--- binding invariants ---")
+    tr.section("binding invariants")
 
     # All classes with extreme severity → binding = 1
     all_one = all(
@@ -692,28 +681,28 @@ if __name__ == "__main__":
             conflict_severity=0.95)).binding_level == 1
         for cls in ReconciliationClass
     )
-    check("all classes: sev=0.95 → binding=1 (IRRECONCILABLE)",
+    tr.ok("all classes: sev=0.95 → binding=1 (IRRECONCILABLE)",
           all_one)
 
     # CASCADING_CONFLICT: binding ≤ 2 even in ALIGNED phase
     casc_aligned = ReconciliationSignal("ca", ReconciliationClass.CASCADING_CONFLICT,
         conflict_severity=0.05, source_agreement_rate=0.95,
         resolution_confidence=0.90, reconciliation_depth=0)
-    check("CASCADING_CONFLICT + ALIGNED: binding ≤ 2",
+    tr.ok("CASCADING_CONFLICT + ALIGNED: binding ≤ 2",
           reconcile(casc_aligned).binding_level <= 2)
 
     # STRUCTURAL_INCONSISTENCY: binding ≤ 3 even with perfect agreement
     struct_aligned = ReconciliationSignal("sa", ReconciliationClass.STRUCTURAL_INCONSISTENCY,
         conflict_severity=0.05, source_agreement_rate=0.95,
         resolution_confidence=0.90, reconciliation_depth=0)
-    check("STRUCTURAL_INCONSISTENCY + ALIGNED: binding ≤ 3",
+    tr.ok("STRUCTURAL_INCONSISTENCY + ALIGNED: binding ≤ 3",
           reconcile(struct_aligned).binding_level <= 3)
 
     # SOURCE_MISMATCH: binding ≤ 3
     src_mismatch = ReconciliationSignal("sm", ReconciliationClass.SOURCE_MISMATCH,
         conflict_severity=0.05, source_agreement_rate=0.95,
         resolution_confidence=0.90, reconciliation_depth=0)
-    check("SOURCE_MISMATCH + ALIGNED: binding ≤ 3",
+    tr.ok("SOURCE_MISMATCH + ALIGNED: binding ≤ 3",
           reconcile(src_mismatch).binding_level <= 3)
 
     # chain_attested boosts binding
@@ -727,7 +716,7 @@ if __name__ == "__main__":
         chain_attested=True)
     b_base  = reconcile(base_sig).binding_level
     b_chain = reconcile(chain_sig).binding_level
-    check(f"chain_attested boosts binding ({b_base} → {b_chain})",
+    tr.ok(f"chain_attested boosts binding ({b_base} → {b_chain})",
           b_chain > b_base)
 
     # conflict_count penalty
@@ -739,7 +728,7 @@ if __name__ == "__main__":
         resolution_confidence=0.80, conflict_count=10)
     b_lo = reconcile(lo_cnt).binding_level
     b_hi = reconcile(hi_cnt).binding_level
-    check(f"high conflict_count reduces binding ({b_lo} → {b_hi})",
+    tr.ok(f"high conflict_count reduces binding ({b_lo} → {b_hi})",
           b_lo > b_hi)
 
     # temporal_gap penalty
@@ -751,7 +740,7 @@ if __name__ == "__main__":
         resolution_confidence=0.80, temporal_gap=60.0)
     b_lo_g = reconcile(lo_gap).binding_level
     b_hi_g = reconcile(hi_gap).binding_level
-    check(f"large temporal_gap reduces binding ({b_lo_g} → {b_hi_g})",
+    tr.ok(f"large temporal_gap reduces binding ({b_lo_g} → {b_hi_g})",
           b_lo_g > b_hi_g)
 
     # binding drift penalty (prior=5, current=1 → drift_mag=4)
@@ -763,7 +752,7 @@ if __name__ == "__main__":
         resolution_confidence=0.80, prior_binding=5, current_binding=1)
     b_no_dr = reconcile(no_drift).binding_level
     b_dr    = reconcile(large_drift).binding_level
-    check(f"large binding drift reduces binding ({b_no_dr} → {b_dr})",
+    tr.ok(f"large binding drift reduces binding ({b_no_dr} → {b_dr})",
           b_no_dr > b_dr)
 
     # All classes produce valid binding
@@ -773,12 +762,12 @@ if __name__ == "__main__":
             resolution_confidence=0.60)).binding_level <= 5
         for cls in ReconciliationClass
     )
-    check("all ReconciliationClass values → binding in [1, 5]", all_valid)
+    tr.ok("all ReconciliationClass values → binding in [1, 5]", all_valid)
 
     # ── Verdict logic ─────────────────────────────────────────────────────────
-    print("\n--- verdict logic ---")
+    tr.section("verdict logic")
 
-    check("IRRECONCILABLE → VOID",
+    tr.ok("IRRECONCILABLE → VOID",
           ir_dec.verdict == ReconciliationVerdict.VOID)
 
     # binding=1 non-IRRECONCILABLE (conf ≥ 0.30 → WITHHOLD)
@@ -786,7 +775,7 @@ if __name__ == "__main__":
         conflict_severity=0.65, source_agreement_rate=0.40,
         resolution_confidence=0.35, reconciliation_depth=0)
     v_b1w = reconcile(b1_withhold).verdict
-    check(f"binding=1 + non-IRRECONCILABLE + conf≥0.30 → WITHHOLD (got {v_b1w.value})",
+    tr.ok(f"binding=1 + non-IRRECONCILABLE + conf≥0.30 → WITHHOLD (got {v_b1w.value})",
           v_b1w == ReconciliationVerdict.WITHHOLD)
 
     # binding=1 non-IRRECONCILABLE (conf < 0.30 → GATHER)
@@ -794,10 +783,10 @@ if __name__ == "__main__":
         conflict_severity=0.65, source_agreement_rate=0.40,
         resolution_confidence=0.25, reconciliation_depth=0)
     v_b1g = reconcile(b1_gather).verdict
-    check(f"binding=1 + non-IRRECONCILABLE + conf<0.30 → GATHER (got {v_b1g.value})",
+    tr.ok(f"binding=1 + non-IRRECONCILABLE + conf<0.30 → GATHER (got {v_b1g.value})",
           v_b1g == ReconciliationVerdict.GATHER)
 
-    check("ALIGNED + binding≥4 → RECONCILE_AFFIRM",
+    tr.ok("ALIGNED + binding≥4 → RECONCILE_AFFIRM",
           a_dec.verdict == ReconciliationVerdict.RECONCILE_AFFIRM)
 
     # RECONCILING + conf=0.80 + binding≥3 → RECONCILE_AFFIRM
@@ -805,7 +794,7 @@ if __name__ == "__main__":
         conflict_severity=0.40, source_agreement_rate=0.70,
         resolution_confidence=0.80, reconciliation_depth=1)
     v_ra = reconcile(rec_affirm).verdict
-    check(f"RECONCILING + conf≥0.70 + binding≥3 → RECONCILE_AFFIRM (got {v_ra.value})",
+    tr.ok(f"RECONCILING + conf≥0.70 + binding≥3 → RECONCILE_AFFIRM (got {v_ra.value})",
           v_ra == ReconciliationVerdict.RECONCILE_AFFIRM)
 
     # DIVERGENT + binding=3 → SCRUTINISE
@@ -813,7 +802,7 @@ if __name__ == "__main__":
         conflict_severity=0.40, source_agreement_rate=0.70,
         resolution_confidence=0.80, reconciliation_depth=0)
     v_ds = reconcile(div_scr).verdict
-    check(f"DIVERGENT + binding=3 → SCRUTINISE (got {v_ds.value})",
+    tr.ok(f"DIVERGENT + binding=3 → SCRUTINISE (got {v_ds.value})",
           v_ds == ReconciliationVerdict.SCRUTINISE)
 
     # binding=2 + conf<0.35 → GATHER
@@ -821,7 +810,7 @@ if __name__ == "__main__":
         conflict_severity=0.30, source_agreement_rate=0.50,
         resolution_confidence=0.20, reconciliation_depth=0)
     v_b2g = reconcile(b2_gather).verdict
-    check(f"binding=2 + conf<0.35 → GATHER (got {v_b2g.value})",
+    tr.ok(f"binding=2 + conf<0.35 → GATHER (got {v_b2g.value})",
           v_b2g == ReconciliationVerdict.GATHER)
 
     # binding=2 + conf≥0.35 → WITHHOLD
@@ -829,28 +818,28 @@ if __name__ == "__main__":
         conflict_severity=0.30, source_agreement_rate=0.50,
         resolution_confidence=0.50, reconciliation_depth=0)
     v_b2w = reconcile(b2_withhold).verdict
-    check(f"binding=2 + conf≥0.35 → WITHHOLD (got {v_b2w.value})",
+    tr.ok(f"binding=2 + conf≥0.35 → WITHHOLD (got {v_b2w.value})",
           v_b2w == ReconciliationVerdict.WITHHOLD)
 
     # governance_action non-empty for all
     all_have_action = all(len(d.governance_action) > 0 for d in
                           [a_dec, c_dec, ir_dec, ca_dec, re_dec])
-    check("all decisions have non-empty governance_action", all_have_action)
+    tr.ok("all decisions have non-empty governance_action", all_have_action)
 
     # ── Surface audit ─────────────────────────────────────────────────────────
-    print("\n--- surface audit ---")
+    tr.section("surface audit")
 
     empty_audit = audit_reconciliation_surface([])
-    check("empty field → RECONCILED",
+    tr.ok("empty field → RECONCILED",
           empty_audit.surface == ReconciliationSurface.RECONCILED)
-    check("empty field → mean_binding=5.0",
+    tr.ok("empty field → mean_binding=5.0",
           empty_audit.mean_binding == 5.0)
 
     # COLLAPSED: ≥40% VOID
     void_decs    = [reconcile(irreconcilable_signal(f"v{i}")) for i in range(5)]
     affirm_decs  = [reconcile(aligned_signal(f"a{i}")) for i in range(5)]
     collapsed_audit = audit_reconciliation_surface(void_decs + affirm_decs)
-    check("50% VOID → COLLAPSED surface",
+    tr.ok("50% VOID → COLLAPSED surface",
           collapsed_audit.surface == ReconciliationSurface.COLLAPSED)
 
     # FRAGMENTED: ≥25% (void + withhold)
@@ -867,7 +856,7 @@ if __name__ == "__main__":
     )
     frag_audit = audit_reconciliation_surface(frag_decs)
     frag_rate  = (frag_audit.void_count + frag_audit.withhold_count) / frag_audit.total_decisions
-    check(f"problem_rate={frag_rate:.0%} ≥ 25% → FRAGMENTED or COLLAPSED",
+    tr.ok(f"problem_rate={frag_rate:.0%} ≥ 25% → FRAGMENTED or COLLAPSED",
           frag_audit.surface in (ReconciliationSurface.FRAGMENTED, ReconciliationSurface.COLLAPSED))
 
     # CONTESTED: ≥15% concern (scrutinise/withhold/void)
@@ -886,7 +875,7 @@ if __name__ == "__main__":
         (contest_audit.void_count + contest_audit.withhold_count + contest_audit.scrutinise_count)
         / contest_audit.total_decisions
     )
-    check(f"concern_rate={concern_rt:.0%} ≥ 15% → CONTESTED or worse",
+    tr.ok(f"concern_rate={concern_rt:.0%} ≥ 15% → CONTESTED or worse",
           contest_audit.surface in (
               ReconciliationSurface.CONTESTED,
               ReconciliationSurface.FRAGMENTED,
@@ -895,17 +884,17 @@ if __name__ == "__main__":
     # RECONCILED: all affirmed
     clean_decs   = [reconcile(aligned_signal(f"cl{i}")) for i in range(6)]
     clean_audit  = audit_reconciliation_surface(clean_decs)
-    check("all RECONCILE_AFFIRM → RECONCILED surface",
+    tr.ok("all RECONCILE_AFFIRM → RECONCILED surface",
           clean_audit.surface == ReconciliationSurface.RECONCILED)
 
     # cascading noted in audit
     casc_decs   = [reconcile(cascading_signal(f"cd{i}")) for i in range(3)]
     casc_audit  = audit_reconciliation_surface(casc_decs)
-    check("cascading signal detected in audit notes",
+    tr.ok("cascading signal detected in audit notes",
           any("cascading" in n.lower() for n in casc_audit.notes))
 
     # ── Sentinel / edge cases ─────────────────────────────────────────────────
-    print("\n--- sentinel & edge cases ---")
+    tr.section("sentinel & edge cases")
 
     def _sentinel(sev=0.5, agr=0.7, conf=0.5):
         sig = ReconciliationSignal("s", ReconciliationClass.VERDICT_CONFLICT,
@@ -914,19 +903,19 @@ if __name__ == "__main__":
         d = reconcile(sig)
         return 1 <= d.binding_level <= 5
 
-    check("NaN conflict_severity → valid binding",
+    tr.ok("NaN conflict_severity → valid binding",
           _sentinel(sev=float("nan")))
-    check("Inf source_agreement_rate → valid binding",
+    tr.ok("Inf source_agreement_rate → valid binding",
           _sentinel(agr=float("inf")))
-    check("-Inf resolution_confidence → valid binding",
+    tr.ok("-Inf resolution_confidence → valid binding",
           _sentinel(conf=float("-inf")))
-    check("conflict_count=0 → valid",
+    tr.ok("conflict_count=0 → valid",
           1 <= reconcile(ReconciliationSignal("z", ReconciliationClass.VERDICT_CONFLICT,
               conflict_count=0)).binding_level <= 5)
-    check("temporal_gap=NaN → valid (treated as 0)",
+    tr.ok("temporal_gap=NaN → valid (treated as 0)",
           1 <= reconcile(ReconciliationSignal("tnan", ReconciliationClass.VERDICT_CONFLICT,
               temporal_gap=float("nan"))).binding_level <= 5)
-    check("reconciliation_depth=-5 → clamped to 0, valid",
+    tr.ok("reconciliation_depth=-5 → clamped to 0, valid",
           1 <= reconcile(ReconciliationSignal("neg", ReconciliationClass.VERDICT_CONFLICT,
               reconciliation_depth=-5)).binding_level <= 5)
 
@@ -934,7 +923,7 @@ if __name__ == "__main__":
     idem_sig = aligned_signal("idem")
     b1 = reconcile(idem_sig).binding_level
     b2 = reconcile(idem_sig).binding_level
-    check(f"idempotency: same signal → same binding ({b1}={b2})", b1 == b2)
+    tr.ok(f"idempotency: same signal → same binding ({b1}={b2})", b1 == b2)
 
     # All ReconciliationPhase values covered (at least one test per phase)
     phase_map = {
@@ -944,13 +933,7 @@ if __name__ == "__main__":
         ReconciliationPhase.RECONCILING:    re_dec.phase,
     }
     for expected, actual in phase_map.items():
-        check(f"builder exercises {expected.value} phase", actual == expected)
+        tr.ok(f"builder exercises {expected.value} phase", actual == expected)
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    print()
-    print("=" * 58)
-    print(f"Results: {_pass} passed, {_fail} failed out of {_pass + _fail} tests")
-    if _fail == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"FAILURES: {_fail}")
+    tr.summary()

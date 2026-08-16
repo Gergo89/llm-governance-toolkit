@@ -34,6 +34,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
+from governance_core import TestRunner
+
 from predictive_recursion_infra import (
     PREstimator,
     PRGovernance,
@@ -660,49 +662,38 @@ def _run_tests() -> None:
         likelihood_conflicted,
     )
 
-    passed = 0
-    failed = 0
 
-    def ok(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL: {name}")
-
-    print("=" * 62)
-    print("pr_topology.py — Stress-Test Suite")
-    print("=" * 62)
+    tr = TestRunner('pr_topology.py — Stress-Test Suite', verbose=False)
+    tr.header()
 
     # ── 1. Empty graph ─────────────────────────────────────────────────────────
     print("\n[1] Empty graph")
     g = PRTopologyGraph("empty")
     a = g.audit()
-    ok("empty: node_count=0", a.node_count == 0)
-    ok("empty: health=FRAGMENTED", a.health == TopologyHealth.FRAGMENTED)
-    ok("empty: verdict=GATHER", a.verdict == TopologyVerdict.TOPOLOGY_GATHER)
+    tr.ok("empty: node_count=0", a.node_count == 0)
+    tr.ok("empty: health=FRAGMENTED", a.health == TopologyHealth.FRAGMENTED)
+    tr.ok("empty: verdict=GATHER", a.verdict == TopologyVerdict.TOPOLOGY_GATHER)
 
     # ── 2. Single node, no edges ───────────────────────────────────────────────
     print("\n[2] Single node, no edges")
     g = PRTopologyGraph("single")
     g.add_node("solo")
     a = g.audit()
-    ok("single: node_count=1", a.node_count == 1)
-    ok("single: edge_count=0", a.edge_count == 0)
-    ok("single: root_count=1", a.root_count == 1)
-    ok("single: no cycles", len(a.cycles) == 0)
+    tr.ok("single: node_count=1", a.node_count == 1)
+    tr.ok("single: edge_count=0", a.edge_count == 0)
+    tr.ok("single: root_count=1", a.root_count == 1)
+    tr.ok("single: no cycles", len(a.cycles) == 0)
 
     # ── 3. Linear chain — all GATHER_MORE (no observations) ───────────────────
     print("\n[3] Linear chain, no observations")
     g = linear_chain("chain-no-obs", 5)
     a = g.audit()
-    ok("chain-no-obs: 5 nodes", a.node_count == 5)
-    ok("chain-no-obs: 4 edges", a.edge_count == 4)
-    ok("chain-no-obs: max_depth=4", a.depth_report.max_depth == 4)
-    ok("chain-no-obs: no cycles", len(a.cycles) == 0)
-    ok("chain-no-obs: gather_count=5", a.gather_count == 5)
-    ok("chain-no-obs: verdict=GATHER", a.verdict == TopologyVerdict.TOPOLOGY_GATHER)
+    tr.ok("chain-no-obs: 5 nodes", a.node_count == 5)
+    tr.ok("chain-no-obs: 4 edges", a.edge_count == 4)
+    tr.ok("chain-no-obs: max_depth=4", a.depth_report.max_depth == 4)
+    tr.ok("chain-no-obs: no cycles", len(a.cycles) == 0)
+    tr.ok("chain-no-obs: gather_count=5", a.gather_count == 5)
+    tr.ok("chain-no-obs: verdict=GATHER", a.verdict == TopologyVerdict.TOPOLOGY_GATHER)
 
     # ── 4. Linear chain — high-binding observations → AFFIRM ──────────────────
     print("\n[4] Linear chain, high-binding observations")
@@ -712,10 +703,10 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk)
     a = g.audit()
-    ok("chain-high: no cycles", len(a.cycles) == 0)
-    ok("chain-high: converged_fraction>=0.7", a.converged_fraction >= 0.7)
-    ok("chain-high: verdict=AFFIRM", a.verdict == TopologyVerdict.TOPOLOGY_AFFIRM)
-    ok("chain-high: health=SOUND", a.health == TopologyHealth.SOUND)
+    tr.ok("chain-high: no cycles", len(a.cycles) == 0)
+    tr.ok("chain-high: converged_fraction>=0.7", a.converged_fraction >= 0.7)
+    tr.ok("chain-high: verdict=AFFIRM", a.verdict == TopologyVerdict.TOPOLOGY_AFFIRM)
+    tr.ok("chain-high: health=SOUND", a.health == TopologyHealth.SOUND)
 
     # ── 5. Low-binding chain → WITHHOLD ───────────────────────────────────────
     print("\n[5] Linear chain, low-binding observations → WITHHOLD")
@@ -725,7 +716,7 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk_low)
     a = g.audit()
-    ok("chain-low: verdict=WITHHOLD", a.verdict == TopologyVerdict.TOPOLOGY_WITHHOLD)
+    tr.ok("chain-low: verdict=WITHHOLD", a.verdict == TopologyVerdict.TOPOLOGY_WITHHOLD)
 
     # ── 6. Diamond graph (fork + merge) ───────────────────────────────────────
     print("\n[6] Diamond graph — fork + merge")
@@ -735,14 +726,14 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk)
     a = g.audit()
-    ok("diamond: node_count=4", a.node_count == 4)
-    ok("diamond: 4 edges", a.edge_count == 4)
-    ok("diamond: 1 fork", len(a.forks) == 1)
-    ok("diamond: 1 merge", len(a.merges) == 1)
-    ok("diamond: fork source=root", a.forks[0].source_claim == "root")
-    ok("diamond: merge target=merge", a.merges[0].target_claim == "merge")
-    ok("diamond: no cycles", len(a.cycles) == 0)
-    ok("diamond: verdict=AFFIRM", a.verdict == TopologyVerdict.TOPOLOGY_AFFIRM)
+    tr.ok("diamond: node_count=4", a.node_count == 4)
+    tr.ok("diamond: 4 edges", a.edge_count == 4)
+    tr.ok("diamond: 1 fork", len(a.forks) == 1)
+    tr.ok("diamond: 1 merge", len(a.merges) == 1)
+    tr.ok("diamond: fork source=root", a.forks[0].source_claim == "root")
+    tr.ok("diamond: merge target=merge", a.merges[0].target_claim == "merge")
+    tr.ok("diamond: no cycles", len(a.cycles) == 0)
+    tr.ok("diamond: verdict=AFFIRM", a.verdict == TopologyVerdict.TOPOLOGY_AFFIRM)
 
     # ── 7. Cycle detection (A→B→A) ────────────────────────────────────────────
     print("\n[7] Cyclic graph — must block inference")
@@ -753,12 +744,12 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk)
     a = g.audit()
-    ok("cyclic: cycle detected", len(a.cycles) >= 1)
-    ok("cyclic: health=CYCLIC", a.health == TopologyHealth.CYCLIC)
-    ok("cyclic: verdict=BLOCK", a.verdict == TopologyVerdict.TOPOLOGY_BLOCK)
-    ok("cyclic: A in_cycle", g.node("A").in_cycle)
-    ok("cyclic: B in_cycle", g.node("B").in_cycle)
-    ok("cyclic: C not in_cycle", not g.node("C").in_cycle)
+    tr.ok("cyclic: cycle detected", len(a.cycles) >= 1)
+    tr.ok("cyclic: health=CYCLIC", a.health == TopologyHealth.CYCLIC)
+    tr.ok("cyclic: verdict=BLOCK", a.verdict == TopologyVerdict.TOPOLOGY_BLOCK)
+    tr.ok("cyclic: A in_cycle", g.node("A").in_cycle)
+    tr.ok("cyclic: B in_cycle", g.node("B").in_cycle)
+    tr.ok("cyclic: C not in_cycle", not g.node("C").in_cycle)
 
     # ── 8. Self-loop ───────────────────────────────────────────────────────────
     print("\n[8] Self-loop")
@@ -769,9 +760,9 @@ def _run_tests() -> None:
     for _ in range(10):
         g.observe("X", lk)
     a = g.audit()
-    ok("self-loop: cycle detected", len(a.cycles) >= 1)
-    ok("self-loop: verdict=BLOCK", a.verdict == TopologyVerdict.TOPOLOGY_BLOCK)
-    ok("self-loop: cycle is self_loop", a.cycles[0].is_self_loop)
+    tr.ok("self-loop: cycle detected", len(a.cycles) >= 1)
+    tr.ok("self-loop: verdict=BLOCK", a.verdict == TopologyVerdict.TOPOLOGY_BLOCK)
+    tr.ok("self-loop: cycle is self_loop", a.cycles[0].is_self_loop)
 
     # ── 9. Deep chain — recursion depth threshold ─────────────────────────────
     print(f"\n[9] Deep chain (depth > {_MAX_SAFE_DEPTH})")
@@ -781,9 +772,9 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk)
     a = g.audit()
-    ok("deep: depth exceeds threshold", a.depth_report.exceeds_threshold)
-    ok("deep: health=DEEP", a.health == TopologyHealth.DEEP)
-    ok("deep: chain length correct",
+    tr.ok("deep: depth exceeds threshold", a.depth_report.exceeds_threshold)
+    tr.ok("deep: health=DEEP", a.health == TopologyHealth.DEEP)
+    tr.ok("deep: chain length correct",
        len(a.depth_report.deepest_chain) == _MAX_SAFE_DEPTH + 3)
 
     # ── 10. Wide fork ─────────────────────────────────────────────────────────
@@ -800,10 +791,10 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(t, lk)
     a = g.audit()
-    ok("wide-fork: 1 fork detected", len(a.forks) == 1)
-    ok("wide-fork: fork breadth=6", a.forks[0].breadth == 6)
-    ok("wide-fork: no cycles", len(a.cycles) == 0)
-    ok("wide-fork: verdict=AFFIRM", a.verdict == TopologyVerdict.TOPOLOGY_AFFIRM)
+    tr.ok("wide-fork: 1 fork detected", len(a.forks) == 1)
+    tr.ok("wide-fork: fork breadth=6", a.forks[0].breadth == 6)
+    tr.ok("wide-fork: no cycles", len(a.cycles) == 0)
+    tr.ok("wide-fork: verdict=AFFIRM", a.verdict == TopologyVerdict.TOPOLOGY_AFFIRM)
 
     # ── 11. Multi-root merge ───────────────────────────────────────────────────
     print("\n[11] Multi-root merge (5 roots → 1 merge)")
@@ -819,9 +810,9 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(src, lk)
     a = g.audit()
-    ok("multi-merge: 1 merge detected", len(a.merges) == 1)
-    ok("multi-merge: merge width=5", a.merges[0].width == 5)
-    ok("multi-merge: no cycles", len(a.cycles) == 0)
+    tr.ok("multi-merge: 1 merge detected", len(a.merges) == 1)
+    tr.ok("multi-merge: merge width=5", a.merges[0].width == 5)
+    tr.ok("multi-merge: no cycles", len(a.cycles) == 0)
 
     # ── 12. Mixed convergence — partial AFFIRM ─────────────────────────────────
     print("\n[12] Mixed convergence (some low, some high)")
@@ -839,8 +830,8 @@ def _run_tests() -> None:
     g.add_edge("node1", "node3")
     g.add_edge("node2", "node3")
     a = g.audit()
-    ok("mixed: no cycles", len(a.cycles) == 0)
-    ok("mixed: verdict not BLOCK", a.verdict != TopologyVerdict.TOPOLOGY_BLOCK)
+    tr.ok("mixed: no cycles", len(a.cycles) == 0)
+    tr.ok("mixed: verdict not BLOCK", a.verdict != TopologyVerdict.TOPOLOGY_BLOCK)
 
     # ── 13. Conflicted evidence → OSCILLATING ─────────────────────────────────
     print("\n[13] Conflicted evidence — nodes stay OSCILLATING")
@@ -852,8 +843,8 @@ def _run_tests() -> None:
         for _ in range(30):
             g.observe(cid, lk_c)
     a = g.audit()
-    ok("conflicted: no cycles", len(a.cycles) == 0)
-    ok("conflicted: gather_count>0", a.gather_count > 0)
+    tr.ok("conflicted: no cycles", len(a.cycles) == 0)
+    tr.ok("conflicted: gather_count>0", a.gather_count > 0)
 
     # ── 14. Role assignment ────────────────────────────────────────────────────
     print("\n[14] Role assignment verification")
@@ -863,10 +854,10 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk)
     g.audit()  # triggers role assignment
-    ok("roles: root is ROOT", g.node("root").role == TopologyRole.ROOT)
-    ok("roles: left is RELAY", g.node("left").role == TopologyRole.RELAY)
-    ok("roles: right is RELAY", g.node("right").role == TopologyRole.RELAY)
-    ok("roles: merge is LEAF", g.node("merge").role == TopologyRole.LEAF)
+    tr.ok("roles: root is ROOT", g.node("root").role == TopologyRole.ROOT)
+    tr.ok("roles: left is RELAY", g.node("left").role == TopologyRole.RELAY)
+    tr.ok("roles: right is RELAY", g.node("right").role == TopologyRole.RELAY)
+    tr.ok("roles: merge is LEAF", g.node("merge").role == TopologyRole.LEAF)
 
     # ── 15. Depth chain verification ──────────────────────────────────────────
     print("\n[15] Depth chain contents verified")
@@ -876,15 +867,15 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(cid, lk)
     a = g.audit()
-    ok("depthcheck: chain starts at c00", a.depth_report.deepest_chain[0] == "c00")
-    ok("depthcheck: chain ends at c04", a.depth_report.deepest_chain[-1] == "c04")
+    tr.ok("depthcheck: chain starts at c00", a.depth_report.deepest_chain[0] == "c00")
+    tr.ok("depthcheck: chain ends at c04", a.depth_report.deepest_chain[-1] == "c04")
 
     # ── 16. Node observe creates node automatically ────────────────────────────
     print("\n[16] Auto-create node on observe")
     g = PRTopologyGraph("auto")
     g.observe("new-claim", likelihood_from_binding(3))
-    ok("auto: node created", g.node("new-claim") is not None)
-    ok("auto: 1 observation", g.node("new-claim").estimator.n_obs == 1)
+    tr.ok("auto: node created", g.node("new-claim") is not None)
+    tr.ok("auto: 1 observation", g.node("new-claim").estimator.n_obs == 1)
 
     # ── 17. Stalled graph (many observations, all conflicted) ─────────────────
     print("\n[17] Stalled graph — all nodes gathering after many observations")
@@ -899,16 +890,16 @@ def _run_tests() -> None:
     g.add_edge("s1", "s2")
     g.add_edge("s2", "s3")
     a = g.audit()
-    ok("stalled: no cycles", len(a.cycles) == 0)
+    tr.ok("stalled: no cycles", len(a.cycles) == 0)
     # Should not be AFFIRM since everything is oscillating
-    ok("stalled: not AFFIRM", a.verdict != TopologyVerdict.TOPOLOGY_AFFIRM)
+    tr.ok("stalled: not AFFIRM", a.verdict != TopologyVerdict.TOPOLOGY_AFFIRM)
 
     # ── 18. Summary text not empty ────────────────────────────────────────────
     print("\n[18] Summary text sanity")
     g = diamond_graph("summary-check")
     a = g.audit()
-    ok("summary: non-empty", len(a.summary) > 10)
-    ok("summary: contains verdict", a.verdict.value in a.summary)
+    tr.ok("summary: non-empty", len(a.summary) > 10)
+    tr.ok("summary: contains verdict", a.verdict.value in a.summary)
 
     # ── 19. Fork all_converged flag ───────────────────────────────────────────
     print("\n[19] Fork all_converged flag")
@@ -923,7 +914,7 @@ def _run_tests() -> None:
         for _ in range(20):
             g.observe(t, lk)
     a = g.audit()
-    ok("fork-conv: fork all_converged=True", a.forks[0].all_converged)
+    tr.ok("fork-conv: fork all_converged=True", a.forks[0].all_converged)
 
     # ── 20. Merge not_all_converged flag ──────────────────────────────────────
     print("\n[20] Merge not-all-converged flag")
@@ -939,8 +930,8 @@ def _run_tests() -> None:
     g.add_node("src-b")  # no observations → GATHER_MORE
     g.add_edge("src-b", "goal")
     a = g.audit()
-    ok("merge-partial: not all_converged", not a.merges[0].all_converged)
-    ok("merge-partial: sources_converged=1", a.merges[0].sources_converged == 1)
+    tr.ok("merge-partial: not all_converged", not a.merges[0].all_converged)
+    tr.ok("merge-partial: sources_converged=1", a.merges[0].sources_converged == 1)
 
     # ── Print results ──────────────────────────────────────────────────────────
     print("\n" + "=" * 62)

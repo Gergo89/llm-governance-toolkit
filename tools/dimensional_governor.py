@@ -34,6 +34,7 @@ import copy, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import determinism_governor as dgov                       # noqa: E402
 from determinism_governor import Case, assess, fingerprint  # noqa: E402
+from governance_core import _c01, TestRunner
 
 
 DIMENSIONS = ("determinism", "purity", "idempotence",
@@ -231,7 +232,7 @@ def report_fingerprint(r: DimReport) -> str:
 # Demonstrations: one target that holds every dimension it claims, then one
 # violator per dimension.
 # ---------------------------------------------------------------------------
-def _clamp01(x):
+def _c01(x):
     return 0.0 if x < 0 else (1.0 if x > 1 else float(x))
 
 
@@ -258,7 +259,7 @@ def _first(seq):                # NOT order-invariant
 
 def _specs():
     return [
-        Spec("clamp01 (holds all it claims)", _clamp01,
+        Spec("clamp01 (holds all it claims)", _c01,
              claims=("determinism", "purity", "idempotence", "monotonicity", "boundedness"),
              cases=(Case("0.5", args=(0.5,)), Case("1.5", args=(1.5,)), Case("-0.2", args=(-0.2,))),
              idempotence_seeds=(0.5, 1.5, -0.2, 0.0, 1.0),

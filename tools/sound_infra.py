@@ -38,6 +38,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -308,99 +309,92 @@ def _sig(sid, energies=(0.1, 0.2, 0.15, 0.18, 0.12), **kw) -> AudioSignal:
 
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('sound_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     # ── Group A: trusted / clean ──────────────────────────────────────────────
     d = evaluate_audio(_sig("A01", crypto_watermark=True, chain_attested=True))
-    check("UT-A01: watermark+attested → TRUSTED",   d.verdict, AudioVerdict.TRUSTED)
-    check("UT-A01b: binding == 5",                  d.binding_level, 5)
-    check("UT-A01c: governance AFFIRM",              d.governance_action, "AFFIRM")
-    check("UT-A01d: AUTHENTIC in threats",           AudioThreat.AUTHENTIC in d.threats, True)
+    tr.expect("UT-A01: watermark+attested → TRUSTED",   d.verdict, AudioVerdict.TRUSTED)
+    tr.expect("UT-A01b: binding == 5",                  d.binding_level, 5)
+    tr.expect("UT-A01c: governance AFFIRM",              d.governance_action, "AFFIRM")
+    tr.expect("UT-A01d: AUTHENTIC in threats",           AudioThreat.AUTHENTIC in d.threats, True)
 
     d = evaluate_audio(_sig("A02", crypto_watermark=True))
-    check("UT-A02: watermark only → TRUSTED, bind=4", d.verdict, AudioVerdict.TRUSTED)
-    check("UT-A02b: binding == 4",                    d.binding_level, 4)
+    tr.expect("UT-A02: watermark only → TRUSTED, bind=4", d.verdict, AudioVerdict.TRUSTED)
+    tr.expect("UT-A02b: binding == 4",                    d.binding_level, 4)
 
     d = evaluate_audio(_sig("A03", declared_speaker_id="alice", speaker_model_dist=0.10))
-    check("UT-A03: speaker match → PROVISIONAL, bind=3", d.verdict, AudioVerdict.PROVISIONAL)
-    check("UT-A03b: binding == 3",                       d.binding_level, 3)
+    tr.expect("UT-A03: speaker match → PROVISIONAL, bind=3", d.verdict, AudioVerdict.PROVISIONAL)
+    tr.expect("UT-A03b: binding == 3",                       d.binding_level, 3)
 
     d = evaluate_audio(_sig("A04"))
-    check("UT-A04: no verification → PROVISIONAL, bind=2", d.verdict, AudioVerdict.PROVISIONAL)
-    check("UT-A04b: binding == 2",                         d.binding_level, 2)
+    tr.expect("UT-A04: no verification → PROVISIONAL, bind=2", d.verdict, AudioVerdict.PROVISIONAL)
+    tr.expect("UT-A04b: binding == 2",                         d.binding_level, 2)
 
     # ── Group B: voice clone ──────────────────────────────────────────────────
     d = evaluate_audio(_sig("B01", declared_speaker_id="alice", speaker_model_dist=0.85))
-    check("UT-B01: high model dist → VOICE_CLONE_SUSPECTED",
+    tr.expect("UT-B01: high model dist → VOICE_CLONE_SUSPECTED",
           AudioThreat.VOICE_CLONE_SUSPECTED in d.threats, True)
-    check("UT-B01b: REJECTED",     d.verdict, AudioVerdict.REJECTED)
-    check("UT-B01c: binding == 1", d.binding_level, 1)
-    check("UT-B01d: governance VOID", d.governance_action, "VOID")
+    tr.expect("UT-B01b: REJECTED",     d.verdict, AudioVerdict.REJECTED)
+    tr.expect("UT-B01c: binding == 1", d.binding_level, 1)
+    tr.expect("UT-B01d: governance VOID", d.governance_action, "VOID")
 
     # No speaker ID → no clone check
     d = evaluate_audio(_sig("B02", speaker_model_dist=0.85))
-    check("UT-B02: no speaker_id → no VOICE_CLONE check",
+    tr.expect("UT-B02: no speaker_id → no VOICE_CLONE check",
           AudioThreat.VOICE_CLONE_SUSPECTED in d.threats, False)
 
     # ── Group C: splice ───────────────────────────────────────────────────────
     d = evaluate_audio(_sig("C01", energies=(0.1, 0.9)))
-    check("UT-C01: 0.8 energy jump → SPLICE_SUSPECTED",
+    tr.expect("UT-C01: 0.8 energy jump → SPLICE_SUSPECTED",
           AudioThreat.SPLICE_SUSPECTED in d.threats, True)
-    check("UT-C01b: REJECTED", d.verdict, AudioVerdict.REJECTED)
+    tr.expect("UT-C01b: REJECTED", d.verdict, AudioVerdict.REJECTED)
 
     d = evaluate_audio(_sig("C02", energies=(0.1, 0.2, 0.15)))
-    check("UT-C02: smooth energies → no SPLICE",
+    tr.expect("UT-C02: smooth energies → no SPLICE",
           AudioThreat.SPLICE_SUSPECTED in d.threats, False)
 
     # ── Group D: subliminal ───────────────────────────────────────────────────
     d = evaluate_audio(_sig("D01", subliminal_band_energy=0.15))
-    check("UT-D01: subliminal energy → SUBLIMINAL_CONTENT",
+    tr.expect("UT-D01: subliminal energy → SUBLIMINAL_CONTENT",
           AudioThreat.SUBLIMINAL_CONTENT in d.threats, True)
-    check("UT-D01b: REJECTED", d.verdict, AudioVerdict.REJECTED)
+    tr.expect("UT-D01b: REJECTED", d.verdict, AudioVerdict.REJECTED)
 
     d = evaluate_audio(_sig("D02", subliminal_band_energy=0.01))
-    check("UT-D02: low subliminal → no threat",
+    tr.expect("UT-D02: low subliminal → no threat",
           AudioThreat.SUBLIMINAL_CONTENT in d.threats, False)
 
     # ── Group E: encoding anomaly ─────────────────────────────────────────────
     d = evaluate_audio(_sig("E01", stated_codec="AAC", detected_codec="MP3"))
-    check("UT-E01: codec mismatch → ENCODING_ANOMALY",
+    tr.expect("UT-E01: codec mismatch → ENCODING_ANOMALY",
           AudioThreat.ENCODING_ANOMALY in d.threats, True)
-    check("UT-E01b: SUSPECT", d.verdict, AudioVerdict.SUSPECT)
+    tr.expect("UT-E01b: SUSPECT", d.verdict, AudioVerdict.SUSPECT)
 
     d = evaluate_audio(_sig("E02", stated_codec="AAC", detected_codec="AAC"))
-    check("UT-E02: codec match → no ENCODING_ANOMALY",
+    tr.expect("UT-E02: codec match → no ENCODING_ANOMALY",
           AudioThreat.ENCODING_ANOMALY in d.threats, False)
 
     d = evaluate_audio(_sig("E03", stated_codec="aac", detected_codec="AAC"))
-    check("UT-E03: case-insensitive codec match → no anomaly",
+    tr.expect("UT-E03: case-insensitive codec match → no anomaly",
           AudioThreat.ENCODING_ANOMALY in d.threats, False)
 
     # ── Group F: replay ───────────────────────────────────────────────────────
     energies = (0.1, 0.2, 0.15)
     fp = _frame_fingerprint(energies)
     d = evaluate_audio(_sig("F01", energies=energies, known_segment_hashes=frozenset([fp])))
-    check("UT-F01: matching fingerprint → REPLAY_SUSPECTED",
+    tr.expect("UT-F01: matching fingerprint → REPLAY_SUSPECTED",
           AudioThreat.REPLAY_SUSPECTED in d.threats, True)
-    check("UT-F01b: SUSPECT", d.verdict, AudioVerdict.SUSPECT)
+    tr.expect("UT-F01b: SUSPECT", d.verdict, AudioVerdict.SUSPECT)
 
     d = evaluate_audio(_sig("F02", energies=energies, known_segment_hashes=frozenset(["deadbeef"])))
-    check("UT-F02: non-matching hash → no REPLAY",
+    tr.expect("UT-F02: non-matching hash → no REPLAY",
           AudioThreat.REPLAY_SUSPECTED in d.threats, False)
 
     # ── Group G: audit_audio_surface ─────────────────────────────────────────
     clean = [_sig(f"G{i}", crypto_watermark=True, chain_attested=True) for i in range(5)]
     audit = audit_audio_surface(clean)
-    check("UT-G01: all trusted → SURFACE_CLEAN",  audit.surface_verdict, AudioSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-G02: trusted == 5",                  audit.trusted, 5)
+    tr.expect("UT-G01: all trusted → SURFACE_CLEAN",  audit.surface_verdict, AudioSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-G02: trusted == 5",                  audit.trusted, 5)
 
     mixed = [
         _sig("G10", crypto_watermark=True, chain_attested=True),   # trusted
@@ -408,15 +402,15 @@ def _run_tests() -> None:
         _sig("G12", stated_codec="AAC", detected_codec="MP3"),      # suspect
     ]
     audit = audit_audio_surface(mixed)
-    check("UT-G03: mix → SURFACE_DEGRADED", audit.surface_verdict, AudioSurfaceVerdict.SURFACE_DEGRADED)
-    check("UT-G04: suspect == 1",            audit.suspect, 1)
+    tr.expect("UT-G03: mix → SURFACE_DEGRADED", audit.surface_verdict, AudioSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("UT-G04: suspect == 1",            audit.suspect, 1)
 
     one_rejected = [
         _sig("G20", declared_speaker_id="a", speaker_model_dist=0.9),
         _sig("G21"),
     ]
     audit = audit_audio_surface(one_rejected)
-    check("UT-G05: 1 rejected → CONTAMINATED",
+    tr.expect("UT-G05: 1 rejected → CONTAMINATED",
           audit.surface_verdict, AudioSurfaceVerdict.SURFACE_CONTAMINATED)
 
     three_rejected = [
@@ -424,12 +418,12 @@ def _run_tests() -> None:
         for i in range(3)
     ]
     audit = audit_audio_surface(three_rejected)
-    check("UT-G06: 3 rejected → COMPROMISED",
+    tr.expect("UT-G06: 3 rejected → COMPROMISED",
           audit.surface_verdict, AudioSurfaceVerdict.SURFACE_COMPROMISED)
 
     audit_empty = audit_audio_surface([])
-    check("UT-G07: empty → SURFACE_CLEAN",    audit_empty.surface_verdict, AudioSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-G08: empty total_signals == 0", audit_empty.total_signals, 0)
+    tr.expect("UT-G07: empty → SURFACE_CLEAN",    audit_empty.surface_verdict, AudioSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-G08: empty total_signals == 0", audit_empty.total_signals, 0)
 
     # threat distribution
     sigs = [
@@ -437,9 +431,9 @@ def _run_tests() -> None:
         _sig("G41"),
     ]
     audit = audit_audio_surface(sigs)
-    check("UT-G09: VOICE_CLONE dist == 1",
+    tr.expect("UT-G09: VOICE_CLONE dist == 1",
           audit.threat_distribution[AudioThreat.VOICE_CLONE_SUSPECTED.value], 1)
-    check("UT-G10: AUTHENTIC dist == 1",
+    tr.expect("UT-G10: AUTHENTIC dist == 1",
           audit.threat_distribution[AudioThreat.AUTHENTIC.value], 1)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
@@ -447,16 +441,16 @@ def _run_tests() -> None:
     # ST-01: 1000 clean watermarked → all TRUSTED, SURFACE_CLEAN
     st1 = [_sig(f"s1_{i}", crypto_watermark=True, chain_attested=True) for i in range(1000)]
     a1 = audit_audio_surface(st1)
-    check("ST-01: 1000 clean → SURFACE_CLEAN",  a1.surface_verdict, AudioSurfaceVerdict.SURFACE_CLEAN)
-    check("ST-01b: trusted == 1000",              a1.trusted, 1000)
+    tr.expect("ST-01: 1000 clean → SURFACE_CLEAN",  a1.surface_verdict, AudioSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("ST-01b: trusted == 1000",              a1.trusted, 1000)
 
     # ST-02: 500 clone attacks → all REJECTED, COMPROMISED
     st2 = [_sig(f"s2_{i}", declared_speaker_id="alice", speaker_model_dist=0.99)
            for i in range(500)]
     a2 = audit_audio_surface(st2)
-    check("ST-02: 500 clone attacks → SURFACE_COMPROMISED",
+    tr.expect("ST-02: 500 clone attacks → SURFACE_COMPROMISED",
           a2.surface_verdict, AudioSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-02b: rejected == 500", a2.rejected, 500)
+    tr.expect("ST-02b: rejected == 500", a2.rejected, 500)
 
     # ST-03: 200 splice attacks in 800 clean
     st3 = (
@@ -464,28 +458,28 @@ def _run_tests() -> None:
         + [_sig(f"s3b{i}", energies=(0.1, 0.9)) for i in range(200)]
     )
     a3 = audit_audio_surface(st3)
-    check("ST-03: 200 splice → COMPROMISED",
+    tr.expect("ST-03: 200 splice → COMPROMISED",
           a3.surface_verdict, AudioSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-03b: trusted == 800",  a3.trusted, 800)
-    check("ST-03c: rejected == 200", a3.rejected, 200)
+    tr.expect("ST-03b: trusted == 800",  a3.trusted, 800)
+    tr.expect("ST-03c: rejected == 200", a3.rejected, 200)
 
     # ST-04: encoding anomaly flood → all SUSPECT, SURFACE_DEGRADED
     st4 = [_sig(f"s4_{i}", stated_codec="AAC", detected_codec="MP3") for i in range(300)]
     a4 = audit_audio_surface(st4)
-    check("ST-04: 300 anomaly → all SUSPECT", a4.suspect, 300)
-    check("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, AudioSurfaceVerdict.SURFACE_DEGRADED)
+    tr.expect("ST-04: 300 anomaly → all SUSPECT", a4.suspect, 300)
+    tr.expect("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, AudioSurfaceVerdict.SURFACE_DEGRADED)
 
     # ST-05: subliminal mass → all REJECTED, COMPROMISED
     st5 = [_sig(f"s5_{i}", subliminal_band_energy=0.20) for i in range(100)]
     a5 = audit_audio_surface(st5)
-    check("ST-05: 100 subliminal → all REJECTED", a5.rejected, 100)
-    check("ST-05b: SURFACE_COMPROMISED",
+    tr.expect("ST-05: 100 subliminal → all REJECTED", a5.rejected, 100)
+    tr.expect("ST-05b: SURFACE_COMPROMISED",
           a5.surface_verdict, AudioSurfaceVerdict.SURFACE_COMPROMISED)
 
     # ST-06: 2 rejected (< 3) → CONTAMINATED not COMPROMISED
     st6 = [_sig(f"s6_{i}", declared_speaker_id="x", speaker_model_dist=0.9) for i in range(2)]
     a6 = audit_audio_surface(st6)
-    check("ST-06: 2 rejected → CONTAMINATED",
+    tr.expect("ST-06: 2 rejected → CONTAMINATED",
           a6.surface_verdict, AudioSurfaceVerdict.SURFACE_CONTAMINATED)
 
     # ST-07: threat_distribution accuracy
@@ -494,21 +488,19 @@ def _run_tests() -> None:
         + [_sig(f"s7b{i}", stated_codec="AAC", detected_codec="MP3") for i in range(100)]
     )
     a7 = audit_audio_surface(st7)
-    check("ST-07: AUTHENTIC dist == 400",
+    tr.expect("ST-07: AUTHENTIC dist == 400",
           a7.threat_distribution[AudioThreat.AUTHENTIC.value], 400)
-    check("ST-07b: ENCODING_ANOMALY dist == 100",
+    tr.expect("ST-07b: ENCODING_ANOMALY dist == 100",
           a7.threat_distribution[AudioThreat.ENCODING_ANOMALY.value], 100)
 
     # ST-08: multi-threat element (clone + splice) → REJECTED, high_sev counted once per element
     st8 = [_sig("s8_0", energies=(0.1, 0.9),
                 declared_speaker_id="x", speaker_model_dist=0.9)]
     a8 = audit_audio_surface(st8)
-    check("ST-08: clone+splice → REJECTED", a8.rejected, 1)
-    check("ST-08b: high_severity_count == 1", a8.high_severity_count, 1)
+    tr.expect("ST-08: clone+splice → REJECTED", a8.rejected, 1)
+    tr.expect("ST-08b: high_severity_count == 1", a8.high_severity_count, 1)
 
-    print(f"\nsound_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 

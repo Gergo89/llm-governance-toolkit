@@ -60,6 +60,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from governance_core import _sf, _c01, _log_ratio, _binding, TestRunner
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
@@ -178,18 +179,6 @@ _VERDICT_BASE_BINDING: dict[CollapseVerdict, float] = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _sf(x, default: float = 0.0) -> float:
-    if not isinstance(x, (int, float)):
-        return default
-    if not math.isfinite(float(x)):
-        return default
-    return float(x)
-
-
-def _c01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
 
 def _normalize_amps(a_r: float, a_p: float, a_v: float, a_x: float
                     ) -> tuple[float, float, float, float]:
@@ -632,25 +621,12 @@ def entangled_pair(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def _run_tests() -> None:
-    SEP = "=" * 60
-    passed = 0
-    failed = 0
 
-    def ok(label: str, cond: bool) -> None:
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-            print(f"  PASS  {label}")
-        else:
-            failed += 1
-            print(f"  FAIL  {label}")
-
-    print(SEP)
-    print("quantum_ontology_engine  —  unit tests")
-    print(SEP)
+    tr = TestRunner('quantum_ontology_engine  —  unit tests')
+    tr.header()
 
     # ── Builder signals ────────────────────────────────────────────────────────
-    print("\n--- builder signals ---")
+    tr.section("builder signals")
     d_real  = assess_quantum_state(real_state("R", "gravity"))
     d_pot   = assess_quantum_state(potential_state("P", "dark energy"))
     d_void  = assess_quantum_state(void_state("V", "nothing"))
@@ -658,32 +634,32 @@ def _run_tests() -> None:
     d_sup   = assess_quantum_state(superposed_state("S", "schrödinger's cat"))
     d_dec   = assess_quantum_state(decoherent_state("D", "noisy claim"))
 
-    ok("real: binding=5",             d_real.binding == 5)
-    ok("real: COLLAPSED",             d_real.verdict == CollapseVerdict.COLLAPSED)
-    ok("real: dominant=REAL",         d_real.dominant_basis == OntologicalBasis.REAL)
+    tr.ok("real: binding=5",             d_real.binding == 5)
+    tr.ok("real: COLLAPSED",             d_real.verdict == CollapseVerdict.COLLAPSED)
+    tr.ok("real: dominant=REAL",         d_real.dominant_basis == OntologicalBasis.REAL)
 
-    ok("void: binding=1",             d_void.binding == 1)
-    ok("void: VOID_COLLAPSED",        d_void.verdict == CollapseVerdict.VOID_COLLAPSED)
+    tr.ok("void: binding=1",             d_void.binding == 1)
+    tr.ok("void: VOID_COLLAPSED",        d_void.verdict == CollapseVerdict.VOID_COLLAPSED)
 
-    ok("paradox: PARADOXICAL",        d_par.verdict == CollapseVerdict.PARADOXICAL)
-    ok("paradox: binding=1",          d_par.binding == 1)
+    tr.ok("paradox: PARADOXICAL",        d_par.verdict == CollapseVerdict.PARADOXICAL)
+    tr.ok("paradox: binding=1",          d_par.binding == 1)
 
-    ok("superposed: SUPERPOSED",      d_sup.verdict == CollapseVerdict.SUPERPOSED)
-    ok("superposed: binding=3",       d_sup.binding == 3)
+    tr.ok("superposed: SUPERPOSED",      d_sup.verdict == CollapseVerdict.SUPERPOSED)
+    tr.ok("superposed: binding=3",       d_sup.binding == 3)
 
-    ok("decoherent: DECOHERENT",      d_dec.verdict == CollapseVerdict.DECOHERENT)
-    ok("decoherent: binding≤2",       d_dec.binding <= 2)
+    tr.ok("decoherent: DECOHERENT",      d_dec.verdict == CollapseVerdict.DECOHERENT)
+    tr.ok("decoherent: binding≤2",       d_dec.binding <= 2)
 
     # ── Ordering invariant ─────────────────────────────────────────────────────
-    print("\n--- ordering invariant ---")
-    ok("real ≥ potential",       d_real.binding >= d_pot.binding)
-    ok("potential ≥ superposed", d_pot.binding  >= d_sup.binding)
-    ok("superposed ≥ decoherent",d_sup.binding  >= d_dec.binding)
-    ok("decoherent ≥ void",      d_dec.binding  >= d_void.binding)
-    ok("void == paradox binding",d_void.binding == d_par.binding)
+    tr.section("ordering invariant")
+    tr.ok("real ≥ potential",       d_real.binding >= d_pot.binding)
+    tr.ok("potential ≥ superposed", d_pot.binding  >= d_sup.binding)
+    tr.ok("superposed ≥ decoherent",d_sup.binding  >= d_dec.binding)
+    tr.ok("decoherent ≥ void",      d_dec.binding  >= d_void.binding)
+    tr.ok("void == paradox binding",d_void.binding == d_par.binding)
 
     # ── Coherence modulates COLLAPSED binding ─────────────────────────────────
-    print("\n--- coherence modulation ---")
+    tr.section("coherence modulation")
     high_coh = QuantumOntologySignal(
         claim_id="hc", a_real=0.92, a_potential=0.10, a_void=0.05, a_paradox=0.0,
         entropy=0.01, decoherence_rate=0.01,
@@ -694,12 +670,12 @@ def _run_tests() -> None:
     )
     d_hc = assess_quantum_state(high_coh)
     d_lc = assess_quantum_state(low_coh)
-    ok("high coherence → binding=5",     d_hc.binding == 5)
-    ok("low coherence → binding < high", d_lc.binding < d_hc.binding)
-    ok("both COLLAPSED",                 d_hc.verdict == d_lc.verdict == CollapseVerdict.COLLAPSED)
+    tr.ok("high coherence → binding=5",     d_hc.binding == 5)
+    tr.ok("low coherence → binding < high", d_lc.binding < d_hc.binding)
+    tr.ok("both COLLAPSED",                 d_hc.verdict == d_lc.verdict == CollapseVerdict.COLLAPSED)
 
     # ── Observation count nudges SUPERPOSED binding ────────────────────────────
-    print("\n--- observation count ---")
+    tr.section("observation count")
     sup_zero = assess_quantum_state(QuantumOntologySignal(
         claim_id="sz", a_real=0.5, a_potential=0.5, a_void=0.5, a_paradox=0.5,
         observation_count=0,
@@ -708,11 +684,11 @@ def _run_tests() -> None:
         claim_id="sm", a_real=0.5, a_potential=0.5, a_void=0.5, a_paradox=0.5,
         observation_count=10,
     ))
-    ok("sup_zero: binding=3",                  sup_zero.binding == 3)
-    ok("many obs ≥ zero obs binding",          sup_many.binding >= sup_zero.binding)
+    tr.ok("sup_zero: binding=3",                  sup_zero.binding == 3)
+    tr.ok("many obs ≥ zero obs binding",          sup_many.binding >= sup_zero.binding)
 
     # ── Interference ──────────────────────────────────────────────────────────
-    print("\n--- interference ---")
+    tr.section("interference")
     # Phase=0 → real-aligned → CONSTRUCTIVE
     sig_c = QuantumOntologySignal(
         claim_id="c", a_real=0.92, a_potential=0.20, a_void=0.05, a_paradox=0.0,
@@ -725,12 +701,12 @@ def _run_tests() -> None:
     )
     d_ci = assess_quantum_state(sig_c)
     d_di = assess_quantum_state(sig_d)
-    ok("phase=0 → CONSTRUCTIVE", d_ci.interference == InterferenceType.CONSTRUCTIVE)
-    ok("phase=π → DESTRUCTIVE",  d_di.interference == InterferenceType.DESTRUCTIVE)
-    ok("constructive binding ≥ destructive", d_ci.binding >= d_di.binding)
+    tr.ok("phase=0 → CONSTRUCTIVE", d_ci.interference == InterferenceType.CONSTRUCTIVE)
+    tr.ok("phase=π → DESTRUCTIVE",  d_di.interference == InterferenceType.DESTRUCTIVE)
+    tr.ok("constructive binding ≥ destructive", d_ci.binding >= d_di.binding)
 
     # ── Decoherence floor ─────────────────────────────────────────────────────
-    print("\n--- decoherence floor ---")
+    tr.section("decoherence floor")
     # coherence = 1 - 0.99 * 0.99 ≈ 0.02 < 0.20 → DECOHERENT
     near_zero_coh = QuantumOntologySignal(
         claim_id="dc2",
@@ -738,16 +714,16 @@ def _run_tests() -> None:
         entropy=0.99, decoherence_rate=0.99,
     )
     d_nz = assess_quantum_state(near_zero_coh)
-    ok("entropy=0.99, rate=0.99 → DECOHERENT", d_nz.verdict == CollapseVerdict.DECOHERENT)
-    ok("DECOHERENT binding=2",                 d_nz.binding == 2)
+    tr.ok("entropy=0.99, rate=0.99 → DECOHERENT", d_nz.verdict == CollapseVerdict.DECOHERENT)
+    tr.ok("DECOHERENT binding=2",                 d_nz.binding == 2)
 
     # ── Entanglement check ────────────────────────────────────────────────────
-    print("\n--- entanglement ---")
+    tr.section("entanglement")
     sig_e1, sig_e2 = entangled_pair("E1", "concept A", "E2", "concept B")
     ent = entanglement_check(sig_e1, sig_e2)
-    ok("entangled pair: is_entangled=True",        ent.is_entangled)
-    ok("entangled pair: strength ≥ 0.85",          ent.entanglement_strength >= 0.85)
-    ok("entangled pair: CONSTRUCTIVE (same phase)", ent.interference == InterferenceType.CONSTRUCTIVE)
+    tr.ok("entangled pair: is_entangled=True",        ent.is_entangled)
+    tr.ok("entangled pair: strength ≥ 0.85",          ent.entanglement_strength >= 0.85)
+    tr.ok("entangled pair: CONSTRUCTIVE (same phase)", ent.interference == InterferenceType.CONSTRUCTIVE)
 
     # Non-entangled: very different amplitude vectors
     sig_na = QuantumOntologySignal(claim_id="NA",
@@ -755,8 +731,8 @@ def _run_tests() -> None:
     sig_nb = QuantumOntologySignal(claim_id="NB",
         a_real=0.0, a_potential=0.0, a_void=0.95, a_paradox=0.05)
     ent_no = entanglement_check(sig_na, sig_nb)
-    ok("orthogonal signals: is_entangled=False", not ent_no.is_entangled)
-    ok("orthogonal: strength < 0.85",           ent_no.entanglement_strength < 0.85)
+    tr.ok("orthogonal signals: is_entangled=False", not ent_no.is_entangled)
+    tr.ok("orthogonal: strength < 0.85",           ent_no.entanglement_strength < 0.85)
 
     # Phase difference = π → DESTRUCTIVE pair interference
     sig_pd1 = QuantumOntologySignal(claim_id="PD1",
@@ -766,40 +742,40 @@ def _run_tests() -> None:
         a_real=0.7, a_potential=0.7, a_void=0.1, a_paradox=0.0,
         phase=math.pi, entangled_with="PD1")
     ent_pd = entanglement_check(sig_pd1, sig_pd2)
-    ok("anti-phase entangled pair: DESTRUCTIVE", ent_pd.interference == InterferenceType.DESTRUCTIVE)
+    tr.ok("anti-phase entangled pair: DESTRUCTIVE", ent_pd.interference == InterferenceType.DESTRUCTIVE)
 
     # ── Probability conservation ──────────────────────────────────────────────
-    print("\n--- probability conservation ---")
+    tr.section("probability conservation")
     for label, sig in [("real", real_state("Rp")), ("void", void_state("Vp")),
                        ("superposed", superposed_state("Sp"))]:
         d = assess_quantum_state(sig)
         total_p = d.prob_real + d.prob_potential + d.prob_void + d.prob_paradox
-        ok(f"{label}: Σ probabilities ≈ 1.0", abs(total_p - 1.0) < 1e-9)
+        tr.ok(f"{label}: Σ probabilities ≈ 1.0", abs(total_p - 1.0) < 1e-9)
 
     # ── Field audit ───────────────────────────────────────────────────────────
-    print("\n--- field audit ---")
+    tr.section("field audit")
     fa_empty = quantum_field_audit([])
-    ok("empty → QUANTUM field", fa_empty.field_state == "QUANTUM")
-    ok("empty → mean_binding=3.0", fa_empty.mean_binding == 3.0)
+    tr.ok("empty → QUANTUM field", fa_empty.field_state == "QUANTUM")
+    tr.ok("empty → mean_binding=3.0", fa_empty.mean_binding == 3.0)
 
     classical_ds = [assess_quantum_state(real_state(f"RC{i}")) for i in range(6)]
     fa_clas = quantum_field_audit(classical_ds)
-    ok("all real → CLASSICAL", fa_clas.field_state == "CLASSICAL")
-    ok("all real → mean_binding=5", fa_clas.mean_binding == 5.0)
+    tr.ok("all real → CLASSICAL", fa_clas.field_state == "CLASSICAL")
+    tr.ok("all real → mean_binding=5", fa_clas.mean_binding == 5.0)
 
     void_ds = [assess_quantum_state(void_state(f"VC{i}")) for i in range(4)]
     dec_ds  = [assess_quantum_state(decoherent_state(f"DC{i}")) for i in range(4)]
     fa_void = quantum_field_audit(void_ds + dec_ds)
-    ok("void+decoherent → VOID or COLLAPSING",
+    tr.ok("void+decoherent → VOID or COLLAPSING",
        fa_void.field_state in ("VOID", "COLLAPSING"))
-    ok("void+decoherent → mean_binding ≤ 2", fa_void.mean_binding <= 2)
+    tr.ok("void+decoherent → mean_binding ≤ 2", fa_void.mean_binding <= 2)
 
     quant_ds = [assess_quantum_state(superposed_state(f"QC{i}")) for i in range(5)]
     fa_quant = quantum_field_audit(quant_ds)
-    ok("all superposed → QUANTUM", fa_quant.field_state == "QUANTUM")
+    tr.ok("all superposed → QUANTUM", fa_quant.field_state == "QUANTUM")
 
     # ── Edge cases ────────────────────────────────────────────────────────────
-    print("\n--- edge cases ---")
+    tr.section("edge cases")
     nan_sig = QuantumOntologySignal(
         claim_id="nan",
         a_real=float("nan"), a_potential=float("inf"),
@@ -808,43 +784,36 @@ def _run_tests() -> None:
         phase=float("nan"),
     )
     d_nan = assess_quantum_state(nan_sig)
-    ok("NaN/Inf amps → valid binding", 1 <= d_nan.binding <= 5)
+    tr.ok("NaN/Inf amps → valid binding", 1 <= d_nan.binding <= 5)
 
     zero_sig = QuantumOntologySignal(
         claim_id="zero", a_real=0.0, a_potential=0.0, a_void=0.0, a_paradox=0.0,
     )
     d_zero = assess_quantum_state(zero_sig)
-    ok("all-zero amps → SUPERPOSED (equal superposition)", d_zero.verdict == CollapseVerdict.SUPERPOSED)
-    ok("all-zero amps → valid binding", 1 <= d_zero.binding <= 5)
+    tr.ok("all-zero amps → SUPERPOSED (equal superposition)", d_zero.verdict == CollapseVerdict.SUPERPOSED)
+    tr.ok("all-zero amps → valid binding", 1 <= d_zero.binding <= 5)
 
     neg_sig = QuantumOntologySignal(
         claim_id="neg", a_real=-1.0, a_potential=-0.5, a_void=-2.0, a_paradox=-0.3,
     )
     d_neg = assess_quantum_state(neg_sig)
-    ok("negative amps → valid binding", 1 <= d_neg.binding <= 5)
+    tr.ok("negative amps → valid binding", 1 <= d_neg.binding <= 5)
 
     # ── Idempotency ───────────────────────────────────────────────────────────
-    print("\n--- idempotency ---")
+    tr.section("idempotency")
     idem = real_state("idem")
-    ok("idempotency", assess_quantum_state(idem).binding == assess_quantum_state(idem).binding)
+    tr.ok("idempotency", assess_quantum_state(idem).binding == assess_quantum_state(idem).binding)
 
     # ── Binding ≥ 1 structural invariant ─────────────────────────────────────
-    print("\n--- structural invariant: binding ≥ 1 ---")
+    tr.section("structural invariant: binding ≥ 1")
     worst = [
         decoherent_state(f"W{i}") for i in range(3)
     ] + [void_state(f"WV{i}") for i in range(3)]
-    ok("all worst-case: binding ≥ 1",
+    tr.ok("all worst-case: binding ≥ 1",
        all(assess_quantum_state(s).binding >= 1 for s in worst))
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    print()
-    print(SEP)
-    print(f"Results: {passed} passed, {failed} failed out of {passed+failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        print(f"*** {failed} FAILURE(S) ***")
-    print()
+    tr.summary()
 
 
 if __name__ == "__main__":

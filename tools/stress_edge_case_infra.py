@@ -39,6 +39,7 @@ import traceback
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from governance_core import TestRunner
 
 
 # ---------------------------------------------------------------------------
@@ -529,19 +530,8 @@ def _demo_target_fragile_mean(values: Any) -> float:
 # ---------------------------------------------------------------------------
 
 def _run_tests() -> None:
-    passed = 0
-    failed = 0
-
-    def check(name: str, condition: bool) -> None:
-        nonlocal passed, failed
-        if condition:
-            passed += 1
-            print(f"  PASS  {name}")
-        else:
-            failed += 1
-            print(f"  FAIL  {name}")
-
-    print("=== stress_edge_case_infra tests ===\n")
+    tr = TestRunner('stress_edge_case_infra  —  unit tests')
+    tr.header()
 
     # 1. Robust mean → all sentinel float probes SAFE
     probes = sentinel_float_probes(
@@ -550,9 +540,9 @@ def _run_tests() -> None:
         is_safe=lambda r: isinstance(r, float) and math.isfinite(r),
     )
     report = probe_module("robust_mean", probes)
-    check("robust mean: all sentinel floats SAFE",
+    tr.ok("robust mean: all sentinel floats SAFE",
           report.surface_verdict == EdgeSurfaceVerdict.SAFE)
-    check("robust mean: safety_rate = 1.0", report.safety_rate == 1.0)
+    tr.ok("robust mean: safety_rate = 1.0", report.safety_rate == 1.0)
 
     # 2. Fragile mean → at least some probes CRASH (empty list, None in list)
     fragile_probes = sentinel_list_probes(
@@ -560,8 +550,8 @@ def _run_tests() -> None:
         _demo_target_fragile_mean,
     )
     report = probe_module("fragile_mean", fragile_probes)
-    check("fragile mean: some crashes", report.crash_count > 0)
-    check("fragile mean: not SAFE", report.surface_verdict != EdgeSurfaceVerdict.SAFE)
+    tr.ok("fragile mean: some crashes", report.crash_count > 0)
+    tr.ok("fragile mean: not SAFE", report.surface_verdict != EdgeSurfaceVerdict.SAFE)
 
     # 3. Boundary probes: safe robust handler at common thresholds
     bound_probes = boundary_probes(
@@ -571,8 +561,8 @@ def _run_tests() -> None:
         is_safe=lambda r: isinstance(r, float) and math.isfinite(r),
     )
     report = probe_module("robust_bound", bound_probes)
-    check("robust bound: all safe", report.safe_count == len(bound_probes))
-    check("robust bound: SAFE verdict", report.surface_verdict == EdgeSurfaceVerdict.SAFE)
+    tr.ok("robust bound: all safe", report.safe_count == len(bound_probes))
+    tr.ok("robust bound: SAFE verdict", report.surface_verdict == EdgeSurfaceVerdict.SAFE)
 
     # 4. Degenerate distribution probes: robust handler
     degen_probes = degenerate_distribution_probes(
@@ -581,7 +571,7 @@ def _run_tests() -> None:
         is_safe=lambda r: isinstance(r, float) and math.isfinite(r),
     )
     report = probe_module("robust_degen", degen_probes)
-    check("degenerate dists: robust handler all SAFE",
+    tr.ok("degenerate dists: robust handler all SAFE",
           report.surface_verdict == EdgeSurfaceVerdict.SAFE)
 
     # 5. Type violation probes: handler that rejects wrong types
@@ -594,7 +584,7 @@ def _run_tests() -> None:
     report = probe_module("typed_handler", type_probes)
     # Note: bool is a subclass of int in Python, so bool inputs won't raise TypeError
     # — they are logged as DEFECT. Non-bool wrong types (str, dict, bytes, tuple, set) → SAFE.
-    check("type violations: majority SAFE (TypeErrors raised)",
+    tr.ok("type violations: majority SAFE (TypeErrors raised)",
           report.safe_count >= len(type_probes) - 2)
 
     # 6. Type violation probes: permissive handler → DEFECT
@@ -603,30 +593,30 @@ def _run_tests() -> None:
 
     type_probes2 = type_violation_probes("permissive_handler", _permissive_handler)
     report2 = probe_module("permissive_handler", type_probes2)
-    check("permissive handler: all DEFECT", report2.defect_count == len(type_probes2))
+    tr.ok("permissive handler: all DEFECT", report2.defect_count == len(type_probes2))
 
     # 7. _safe helper
     r = _safe("test_safe", EdgeCategory.SENTINEL)
-    check("_safe outcome = SAFE", r.outcome == EdgeOutcome.SAFE)
+    tr.ok("_safe outcome = SAFE", r.outcome == EdgeOutcome.SAFE)
 
     # 8. _defect helper
     r = _defect("test_defect", EdgeCategory.BOUNDARY, "something wrong")
-    check("_defect outcome = DEFECT", r.outcome == EdgeOutcome.DEFECT)
-    check("_defect description present", r.defect_description == "something wrong")
+    tr.ok("_defect outcome = DEFECT", r.outcome == EdgeOutcome.DEFECT)
+    tr.ok("_defect description present", r.defect_description == "something wrong")
 
     # 9. _crash helper
     try:
         raise ValueError("test error")
     except ValueError as e:
         r = _crash("test_crash", EdgeCategory.EMPTY, e)
-    check("_crash outcome = CRASH", r.outcome == EdgeOutcome.CRASH)
-    check("_crash exception_text present", "ValueError" in (r.exception_text or ""))
+    tr.ok("_crash outcome = CRASH", r.outcome == EdgeOutcome.CRASH)
+    tr.ok("_crash exception_text present", "ValueError" in (r.exception_text or ""))
 
     # 10. Empty probe list → SAFE (vacuous)
     report = probe_module("empty_module", [])
-    check("empty probes → SAFE", report.surface_verdict == EdgeSurfaceVerdict.SAFE)
-    check("empty probes → binding 5", report.binding_level == 5)
-    check("empty probes → total 0", report.total_probes == 0)
+    tr.ok("empty probes → SAFE", report.surface_verdict == EdgeSurfaceVerdict.SAFE)
+    tr.ok("empty probes → binding 5", report.binding_level == 5)
+    tr.ok("empty probes → total 0", report.total_probes == 0)
 
     # 11. Mixed safe/crash → degraded verdict
     probes_mixed = [
@@ -645,10 +635,10 @@ def _run_tests() -> None:
         _make_probe("m2", EdgeCategory.EMPTY,   "crash", "[]", _crash_thunk),
     ]
     report = probe_module("mixed_module", probes_mixed2)
-    check("mixed: safe=1 crash=1", report.safe_count == 1 and report.crash_count == 1)
-    check("mixed: safety_rate=0.5",
+    tr.ok("mixed: safe=1 crash=1", report.safe_count == 1 and report.crash_count == 1)
+    tr.ok("mixed: safety_rate=0.5",
           abs(report.safety_rate - 0.5) < 1e-9)
-    check("mixed: BRITTLE or BROKEN",
+    tr.ok("mixed: BRITTLE or BROKEN",
           report.surface_verdict in (EdgeSurfaceVerdict.BRITTLE, EdgeSurfaceVerdict.BROKEN))
 
     # 12. Per-category safety populated
@@ -658,33 +648,29 @@ def _run_tests() -> None:
         _make_probe("c2", EdgeCategory.RECURSIVE_DEPTH, "safe", "deep",
                     lambda: _safe("c2", EdgeCategory.RECURSIVE_DEPTH)),
     ])
-    check("per_category BOUNDARY present", "BOUNDARY" in report.per_category_safety)
-    check("per_category RECURSIVE_DEPTH present",
+    tr.ok("per_category BOUNDARY present", "BOUNDARY" in report.per_category_safety)
+    tr.ok("per_category RECURSIVE_DEPTH present",
           "RECURSIVE_DEPTH" in report.per_category_safety)
 
     # 13. SENTINELS_FLOAT list has expected number of entries
-    check("SENTINELS_FLOAT: 10 entries", len(SENTINELS_FLOAT) == 10)
+    tr.ok("SENTINELS_FLOAT: 10 entries", len(SENTINELS_FLOAT) == 10)
 
     # 14. SENTINELS_LIST list has expected number of entries
-    check("SENTINELS_LIST: 8 entries", len(SENTINELS_LIST) == 8)
+    tr.ok("SENTINELS_LIST: 8 entries", len(SENTINELS_LIST) == 8)
 
     # 15. Governance action non-empty
-    check("governance_action non-empty",
+    tr.ok("governance_action non-empty",
           isinstance(report.governance_action, str) and len(report.governance_action) > 0)
 
     # 16. Summary non-empty
-    check("summary non-empty",
+    tr.ok("summary non-empty",
           isinstance(report.summary, str) and len(report.summary) > 0)
 
     # 17. Binding in [1, 5]
-    check("binding in [1,5]", 1 <= report.binding_level <= 5)
+    tr.ok("binding in [1,5]", 1 <= report.binding_level <= 5)
 
-    print(f"\n{'='*50}")
-    print(f"Results: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("ALL TESTS PASSED")
-    else:
-        raise SystemExit(f"{failed} test(s) failed")
+    if tr.summary():
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

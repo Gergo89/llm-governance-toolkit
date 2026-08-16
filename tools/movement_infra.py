@@ -38,6 +38,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from governance_core import TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
@@ -403,39 +404,32 @@ def _sig(sid: str, events, **kw) -> MovementSignal:
 
 
 def _run_tests() -> None:
-    passed = failed = 0
-
-    def check(label: str, got, expected) -> None:
-        nonlocal passed, failed
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL {label}: got {got!r}, expected {expected!r}")
+    tr = TestRunner('movement_infra.py — Test Suite', verbose=False)
+    tr.header()
 
     human = _human_events()
     bot   = _bot_events()
 
     # ── Group A: clean human ──────────────────────────────────────────────────
     d = evaluate_movement(_sig("A01", human, hardware_attested=True, biometric_calibrated=True))
-    check("UT-A01: hw+bio → TRUSTED",          d.verdict, MovementVerdict.TRUSTED)
-    check("UT-A01b: binding == 5",              d.binding_level, 5)
-    check("UT-A01c: AFFIRM",                    d.governance_action, "AFFIRM")
-    check("UT-A01d: AUTHENTIC in threats",      MovementThreat.AUTHENTIC in d.threats, True)
+    tr.expect("UT-A01: hw+bio → TRUSTED",          d.verdict, MovementVerdict.TRUSTED)
+    tr.expect("UT-A01b: binding == 5",              d.binding_level, 5)
+    tr.expect("UT-A01c: AFFIRM",                    d.governance_action, "AFFIRM")
+    tr.expect("UT-A01d: AUTHENTIC in threats",      MovementThreat.AUTHENTIC in d.threats, True)
 
     d = evaluate_movement(_sig("A02", human, biometric_calibrated=True))
-    check("UT-A02: bio only → TRUSTED, bind=4", d.verdict, MovementVerdict.TRUSTED)
-    check("UT-A02b: binding == 4",              d.binding_level, 4)
+    tr.expect("UT-A02: bio only → TRUSTED, bind=4", d.verdict, MovementVerdict.TRUSTED)
+    tr.expect("UT-A02b: binding == 4",              d.binding_level, 4)
 
     d = evaluate_movement(_sig("A03", human))
-    check("UT-A03: no calibration → PROVISIONAL, bind=3", d.verdict, MovementVerdict.PROVISIONAL)
-    check("UT-A03b: binding == 3",                        d.binding_level, 3)
+    tr.expect("UT-A03: no calibration → PROVISIONAL, bind=3", d.verdict, MovementVerdict.PROVISIONAL)
+    tr.expect("UT-A03b: binding == 3",                        d.binding_level, 3)
 
     # ── Group B: bot pattern ──────────────────────────────────────────────────
     d = evaluate_movement(_sig("B01", bot))
-    check("UT-B01: bot events → BOT_PATTERN or MICRO_TIMING_REGULAR detected",
+    tr.expect("UT-B01: bot events → BOT_PATTERN or MICRO_TIMING_REGULAR detected",
           any(t in d.threats for t in (MovementThreat.BOT_PATTERN, MovementThreat.MICRO_TIMING_REGULAR)), True)
-    check("UT-B01b: verdict REJECTED or SUSPECT",
+    tr.expect("UT-B01b: verdict REJECTED or SUSPECT",
           d.verdict in (MovementVerdict.REJECTED, MovementVerdict.SUSPECT), True)
 
     # ── Group C: anomalous velocity ───────────────────────────────────────────
@@ -444,66 +438,66 @@ def _run_tests() -> None:
         MovementEvent(x=10_000, y=0, timestamp_ms=1),   # 10_000 px/ms >> limit
     )
     d = evaluate_movement(_sig("C01", fast))
-    check("UT-C01: 10000px/ms → ANOMALOUS_VELOCITY", MovementThreat.ANOMALOUS_VELOCITY in d.threats, True)
-    check("UT-C01b: REJECTED",                        d.verdict, MovementVerdict.REJECTED)
-    check("UT-C01c: max_velocity large",              d.max_velocity > _MAX_HUMAN_VELOCITY_PX_MS, True)
+    tr.expect("UT-C01: 10000px/ms → ANOMALOUS_VELOCITY", MovementThreat.ANOMALOUS_VELOCITY in d.threats, True)
+    tr.expect("UT-C01b: REJECTED",                        d.verdict, MovementVerdict.REJECTED)
+    tr.expect("UT-C01c: max_velocity large",              d.max_velocity > _MAX_HUMAN_VELOCITY_PX_MS, True)
 
     slow = (
         MovementEvent(x=0, y=0, timestamp_ms=0),
         MovementEvent(x=10, y=0, timestamp_ms=100),    # 0.1 px/ms — fine
     )
     d = evaluate_movement(_sig("C02", slow))
-    check("UT-C02: slow movement → no ANOMALOUS_VELOCITY",
+    tr.expect("UT-C02: slow movement → no ANOMALOUS_VELOCITY",
           MovementThreat.ANOMALOUS_VELOCITY in d.threats, False)
 
     # ── Group D: trajectory linearity ─────────────────────────────────────────
     lin = _linear_events()
     d = evaluate_movement(_sig("D01", lin))
-    check("UT-D01: linear path → TRAJECTORY_LINEAR", MovementThreat.TRAJECTORY_LINEAR in d.threats, True)
+    tr.expect("UT-D01: linear path → TRAJECTORY_LINEAR", MovementThreat.TRAJECTORY_LINEAR in d.threats, True)
 
     # ── Group E: replay ───────────────────────────────────────────────────────
     fp = _sequence_fingerprint(human)
     d = evaluate_movement(_sig("E01", human, known_replay_hashes=frozenset([fp])))
-    check("UT-E01: matching replay → SCRIPTED_INJECTION",
+    tr.expect("UT-E01: matching replay → SCRIPTED_INJECTION",
           MovementThreat.SCRIPTED_INJECTION in d.threats, True)
-    check("UT-E01b: REJECTED", d.verdict, MovementVerdict.REJECTED)
+    tr.expect("UT-E01b: REJECTED", d.verdict, MovementVerdict.REJECTED)
 
     d = evaluate_movement(_sig("E02", human, known_replay_hashes=frozenset(["abc123"])))
-    check("UT-E02: no hash match → no SCRIPTED_INJECTION",
+    tr.expect("UT-E02: no hash match → no SCRIPTED_INJECTION",
           MovementThreat.SCRIPTED_INJECTION in d.threats, False)
 
     # ── Group F: short event sequences ───────────────────────────────────────
     one = (MovementEvent(x=0, y=0, timestamp_ms=0),)
     d = evaluate_movement(_sig("F01", one))
-    check("UT-F01: single event → AUTHENTIC (insufficient data)",
+    tr.expect("UT-F01: single event → AUTHENTIC (insufficient data)",
           MovementThreat.AUTHENTIC in d.threats, True)
 
     # ── Group G: audit_movement_surface ───────────────────────────────────────
     clean = [_sig(f"G{i}", human, hardware_attested=True, biometric_calibrated=True)
              for i in range(5)]
     audit = audit_movement_surface(clean)
-    check("UT-G01: all trusted → SURFACE_CLEAN",  audit.surface_verdict, MovementSurfaceVerdict.SURFACE_CLEAN)
-    check("UT-G02: trusted == 5",                  audit.trusted, 5)
+    tr.expect("UT-G01: all trusted → SURFACE_CLEAN",  audit.surface_verdict, MovementSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-G02: trusted == 5",                  audit.trusted, 5)
 
     one_rejected = [
         _sig("G10", human, biometric_calibrated=True),
         _sig("G11", fast),
     ]
     audit = audit_movement_surface(one_rejected)
-    check("UT-G03: 1 rejected → CONTAMINATED",
+    tr.expect("UT-G03: 1 rejected → CONTAMINATED",
           audit.surface_verdict, MovementSurfaceVerdict.SURFACE_CONTAMINATED)
 
     three_rejected = [_sig(f"G2{i}", fast) for i in range(3)]
     audit = audit_movement_surface(three_rejected)
-    check("UT-G04: 3 rejected → COMPROMISED",
+    tr.expect("UT-G04: 3 rejected → COMPROMISED",
           audit.surface_verdict, MovementSurfaceVerdict.SURFACE_COMPROMISED)
 
     audit_empty = audit_movement_surface([])
-    check("UT-G05: empty → SURFACE_CLEAN", audit_empty.surface_verdict, MovementSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("UT-G05: empty → SURFACE_CLEAN", audit_empty.surface_verdict, MovementSurfaceVerdict.SURFACE_CLEAN)
 
     dist_test = [_sig("G30", fast), _sig("G31", human, biometric_calibrated=True)]
     audit = audit_movement_surface(dist_test)
-    check("UT-G06: AUTHENTIC in dist",
+    tr.expect("UT-G06: AUTHENTIC in dist",
           audit.threat_distribution[MovementThreat.AUTHENTIC.value] >= 1, True)
 
     # ── Stress tests ──────────────────────────────────────────────────────────
@@ -512,15 +506,15 @@ def _run_tests() -> None:
     st1 = [_sig(f"s1_{i}", human, hardware_attested=True, biometric_calibrated=True)
            for i in range(1000)]
     a1 = audit_movement_surface(st1)
-    check("ST-01: 1000 human → SURFACE_CLEAN", a1.surface_verdict, MovementSurfaceVerdict.SURFACE_CLEAN)
-    check("ST-01b: trusted == 1000",            a1.trusted, 1000)
+    tr.expect("ST-01: 1000 human → SURFACE_CLEAN", a1.surface_verdict, MovementSurfaceVerdict.SURFACE_CLEAN)
+    tr.expect("ST-01b: trusted == 1000",            a1.trusted, 1000)
 
     # ST-02: 500 velocity attacks → all REJECTED, COMPROMISED
     st2 = [_sig(f"s2_{i}", fast) for i in range(500)]
     a2 = audit_movement_surface(st2)
-    check("ST-02: 500 velocity attacks → SURFACE_COMPROMISED",
+    tr.expect("ST-02: 500 velocity attacks → SURFACE_COMPROMISED",
           a2.surface_verdict, MovementSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-02b: rejected == 500", a2.rejected, 500)
+    tr.expect("ST-02b: rejected == 500", a2.rejected, 500)
 
     # ST-03: 800 human + 200 bot → COMPROMISED (200 rejected ≥ 3)
     st3 = (
@@ -528,36 +522,36 @@ def _run_tests() -> None:
         + [_sig(f"s3b{i}", fast) for i in range(200)]
     )
     a3 = audit_movement_surface(st3)
-    check("ST-03: 200 rejected → COMPROMISED",
+    tr.expect("ST-03: 200 rejected → COMPROMISED",
           a3.surface_verdict, MovementSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-03b: trusted == 800",  a3.trusted, 800)
-    check("ST-03c: rejected == 200", a3.rejected, 200)
+    tr.expect("ST-03b: trusted == 800",  a3.trusted, 800)
+    tr.expect("ST-03c: rejected == 200", a3.rejected, 200)
 
     # ST-04: all sessions with replay → all REJECTED
     fp2 = _sequence_fingerprint(human)
     st4 = [_sig(f"s4_{i}", human, known_replay_hashes=frozenset([fp2])) for i in range(100)]
     a4 = audit_movement_surface(st4)
-    check("ST-04: 100 replay → all REJECTED", a4.rejected, 100)
-    check("ST-04b: SURFACE_COMPROMISED",
+    tr.expect("ST-04: 100 replay → all REJECTED", a4.rejected, 100)
+    tr.expect("ST-04b: SURFACE_COMPROMISED",
           a4.surface_verdict, MovementSurfaceVerdict.SURFACE_COMPROMISED)
 
     # ST-05: 2 rejected → CONTAMINATED (not COMPROMISED)
     st5 = [_sig(f"s5_{i}", fast) for i in range(2)]
     a5 = audit_movement_surface(st5)
-    check("ST-05: 2 rejected → CONTAMINATED",
+    tr.expect("ST-05: 2 rejected → CONTAMINATED",
           a5.surface_verdict, MovementSurfaceVerdict.SURFACE_CONTAMINATED)
 
     # ST-06: high_severity_count threshold
     st6 = [_sig(f"s6_{i}", fast) for i in range(3)]
     a6 = audit_movement_surface(st6)
-    check("ST-06: high_sev == 3 → COMPROMISED",
+    tr.expect("ST-06: high_sev == 3 → COMPROMISED",
           a6.surface_verdict, MovementSurfaceVerdict.SURFACE_COMPROMISED)
-    check("ST-06b: high_severity_count == 3", a6.high_severity_count, 3)
+    tr.expect("ST-06b: high_severity_count == 3", a6.high_severity_count, 3)
 
     # ST-07: entropy_bits reported correctly
     d_human = evaluate_movement(_sig("s7_0", human))
     d_bot   = evaluate_movement(_sig("s7_1", bot))
-    check("ST-07: human entropy > bot entropy", d_human.entropy_bits > d_bot.entropy_bits, True)
+    tr.expect("ST-07: human entropy > bot entropy", d_human.entropy_bits > d_bot.entropy_bits, True)
 
     # ST-08: threat_distribution accuracy
     st8 = (
@@ -565,12 +559,10 @@ def _run_tests() -> None:
         + [_sig(f"s8b{i}", fast) for i in range(200)]
     )
     a8 = audit_movement_surface(st8)
-    check("ST-08: AUTHENTIC dist == 300",
+    tr.expect("ST-08: AUTHENTIC dist == 300",
           a8.threat_distribution[MovementThreat.AUTHENTIC.value], 300)
 
-    print(f"\nmovement_infra: {passed} passed, {failed} failed "
-          f"({passed}/{passed+failed} = {100*passed//(passed+failed)}%)")
-    if failed:
+    if tr.summary():
         raise SystemExit(1)
 
 
