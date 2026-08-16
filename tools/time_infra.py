@@ -1,526 +1,413 @@
 #!/usr/bin/env python3
 """
-time_infra.py — Temporal Claim Infrastructure
-Governance layer for temporal claims fed into the LLM governance mesh.
+time_infra.py — Temporal Dynamics Governance
 
-Core principle: every claim is anchored in time, and temporal anchoring is
-independently falsifiable.  A timestamp is one of the few claim attributes
-that can be cross-verified against sources that are physically independent
-of the claimant — atomic clocks, consensus networks, log chains.
-Temporal governance converts time-claim trust into binding elevation.
+Models how reasoning systems handle time — not time as an ontological category
+(see time_ontology_infra.py) but as a *dynamic signal*: the flow, ordering,
+lag, drift, and resolution of temporal information through an epistemic system.
 
-Theoretical foundations:
-  Lamport (1978)     — logical clocks and happened-before relation
-  Merkle (1987)      — hash-chain timestamping; tamper-evident temporal logs
-  Haber & Stornetta (1991) — secure time-stamping via linked hash chains
-  Fischer et al. (1985)    — impossibility of distributed consensus with failures
-  Roughtime (RFC 9557)     — authenticated roughtime for network time verification
+A framework can be logically valid yet temporally incoherent: causes arrive
+after effects, claim validity windows are ignored, old beliefs persist past
+their expiry, or update velocity is so low that the model operates on stale
+data.  This module governs those failure modes.
 
-Temporal threat taxonomy:
-  TEMPORAL_PARADOX       — claim references event provably impossible at stated time (severity 3)
-  FABRICATED_TIMESTAMP   — statistical impossibility in timestamp distribution (severity 3)
-  CLOCK_SKEW_DETECTED    — system clock diverges from NTP beyond tolerance (severity 3)
-  STALE_CLAIM            — claim timestamp older than freshness window (severity 2)
-  FUTURE_CLAIM           — claim timestamp is ahead of verified current time (severity 2)
-  TIMESTAMP_CONSISTENT   — cross-source temporal agreement (severity 0)
+Theoretical grounding
+─────────────────────
+  Reichenbach (1956)   — asymmetry of time in causal inference
+  Pearl & Mackenzie (2018) — causal graphs and the direction of time
+  Kahneman (2011)      — "what you see is all there is" and horizon neglect
+  Taleb (2007)         — tail risks invisible below temporal horizon
+  Minsky (1988)        — frame problem and temporal persistence
 
-Binding by verification source:
-  5 — blockchain / Roughtime + NTP agreement
-  4 — NTP agreement only
-  3 — system clock, no skew detected
-  2 — stale or future claim
-  1 — paradox / fabrication / clock skew
+Ontology
+────────
+  - Causal arrow: time moves in one direction; epistemic causes precede effects
+  - Validity window: every claim has a lifespan after which it may be stale
+  - Update cycle: the rhythm at which new evidence is integrated
+  - Temporal horizon: the farthest point in time a model can reason about
+  - Lag: delay between an event occurring and the system registering it
+
+Governance dimensions (all [0, 1])
+───────────────────────────────────────────────────────────────────────────────
+  causal_ordering      Degree to which causes precede effects in reasoning.
+                       Low → backward reasoning, post-hoc rationalization.
+  temporal_consistency How stable the system's answers are over time on the
+                       same question.  Low → outputs vary arbitrarily.
+  horizon_clarity      How well the system knows the time limits of its claims.
+                       Low → treating old data as current, horizon neglect.
+  recency_calibration  Balance between updating too fast (noise-chasing) and
+                       too slow (staleness).  Optimum is near 0.5.
+  update_velocity      Speed at which new evidence is integrated.
+                       Very low → stale; very high → unstable.
+  temporal_resolution  Granularity of time-sensitive distinctions.  Low → the
+                       system collapses all timescales into an undifferentiated
+                       "now" or "then".
+
+Risk flags
+───────────────────────────────────────────────────────────────────────────────
+  CAUSAL_INVERSION     causal_ordering critically low; reasoning runs backward.
+  TEMPORAL_DRIFT       temporal_consistency critically low; outputs are
+                       temporally unstable — same input, different output
+                       depending on when it is asked.
+  HORIZON_BLUR         horizon_clarity critically low; the system cannot
+                       distinguish time-bounded from timeless claims.
+  RECENCY_WARP         recency_calibration is far from 0.5 (either extreme
+                       noise-chasing or severe staleness).
+  UPDATE_STALL         update_velocity critically low; the system is frozen in
+                       time and cannot integrate new evidence.
+  RESOLUTION_COLLAPSE  temporal_resolution critically low; all time collapses
+                       into a single undifferentiated point.
+
+Verdicts
+───────────────────────────────────────────────────────────────────────────────
+  TIME_COHERENT   Temporal dynamics are healthy across all dimensions.
+  TIME_LAGGED     System is functional but slower than optimal; lag risk.
+  TIME_CONFUSED   Multiple temporal signals are in conflict or degraded.
+  TIME_INVERTED   Causal arrow is broken; reasoning is moving backward.
+
+Binding levels (1–5)
+───────────────────────────────────────────────────────────────────────────────
+  5  TIME_COHERENT
+  4  TIME_LAGGED    (manageable lag)
+  3  TIME_CONFUSED  (multiple conflicts)
+  2  TIME_INVERTED  (causal failure)
+  1  TEMPORAL COLLAPSE
+
+Stdlib-only, deterministic, self-testing.  Run:  python time_infra.py
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
-from governance_core import TestRunner
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from governance_core import _sf, _c01, _binding, TestRunner
 
 
 # ─── constants ────────────────────────────────────────────────────────────────
 
-_BINDING_MIN: int = 1
-_BINDING_MAX: int = 5
-_HIGH_SEVERITY: int = 3
-_COMPROMISED_REJECTED: int = 3
-_COMPROMISED_HIGH_SEV: int = 3
-
-_NTP_SKEW_TOLERANCE_S: float = 0.5       # ±500 ms max NTP skew
-_FRESHNESS_WINDOW_S: float = 86_400.0    # 24 hours freshness window
-_FUTURE_TOLERANCE_S: float = 5.0         # 5 s ahead is still OK (clock rounding)
-_PARADOX_EPOCH_MS: int = 1_000_000_000_000  # 2001-09-08: anything before this is pre-digital epoch
+_CAUSAL_INVERSION_THRESHOLD: float     = 0.25
+_TEMPORAL_DRIFT_THRESHOLD: float       = 0.25
+_HORIZON_BLUR_THRESHOLD: float         = 0.20
+_RECENCY_WARP_DISTANCE: float          = 0.35   # |recency_calibration - 0.5|
+_UPDATE_STALL_THRESHOLD: float         = 0.15
+_RESOLUTION_COLLAPSE_THRESHOLD: float  = 0.15
 
 
 # ─── enums ────────────────────────────────────────────────────────────────────
 
-class TemporalThreat(Enum):
-    TIMESTAMP_CONSISTENT = "TIMESTAMP_CONSISTENT"
-    STALE_CLAIM          = "STALE_CLAIM"
-    FUTURE_CLAIM         = "FUTURE_CLAIM"
-    TEMPORAL_PARADOX     = "TEMPORAL_PARADOX"
-    FABRICATED_TIMESTAMP = "FABRICATED_TIMESTAMP"
-    CLOCK_SKEW_DETECTED  = "CLOCK_SKEW_DETECTED"
+class TimeRisk(Enum):
+    CAUSAL_INVERSION    = "CAUSAL_INVERSION"
+    TEMPORAL_DRIFT      = "TEMPORAL_DRIFT"
+    HORIZON_BLUR        = "HORIZON_BLUR"
+    RECENCY_WARP        = "RECENCY_WARP"
+    UPDATE_STALL        = "UPDATE_STALL"
+    RESOLUTION_COLLAPSE = "RESOLUTION_COLLAPSE"
 
 
-class TemporalVerdict(Enum):
-    TRUSTED     = "TRUSTED"
-    PROVISIONAL = "PROVISIONAL"
-    SUSPECT     = "SUSPECT"
-    REJECTED    = "REJECTED"
+class TimeVerdict(Enum):
+    TIME_COHERENT  = "TIME_COHERENT"
+    TIME_LAGGED    = "TIME_LAGGED"
+    TIME_CONFUSED  = "TIME_CONFUSED"
+    TIME_INVERTED  = "TIME_INVERTED"
 
 
-class TemporalSurfaceVerdict(Enum):
-    SURFACE_CLEAN        = "SURFACE_CLEAN"
-    SURFACE_DEGRADED     = "SURFACE_DEGRADED"
-    SURFACE_CONTAMINATED = "SURFACE_CONTAMINATED"
-    SURFACE_COMPROMISED  = "SURFACE_COMPROMISED"
+# ─── data model ───────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class TimeSignal:
+    stream_id:            str
+    causal_ordering:      float = 0.80   # [0, 1]
+    temporal_consistency: float = 0.75   # [0, 1]
+    horizon_clarity:      float = 0.70   # [0, 1]
+    recency_calibration:  float = 0.50   # [0, 1]; 0.5 is ideal
+    update_velocity:      float = 0.60   # [0, 1]
+    temporal_resolution:  float = 0.70   # [0, 1]
+    direct_flags:         Tuple[TimeRisk, ...] = ()
+    notes:                str = ""
 
 
-# ─── tables ───────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class TimeDecision:
+    stream_id:        str
+    risks_detected:   Tuple[TimeRisk, ...]
+    verdict:          TimeVerdict
+    binding_level:    int
+    reason:           str
+    scores:           Dict[str, float] = field(default_factory=dict)
 
-_THREAT_SEVERITY: Dict[TemporalThreat, int] = {
-    TemporalThreat.TIMESTAMP_CONSISTENT: 0,
-    TemporalThreat.STALE_CLAIM:          2,
-    TemporalThreat.FUTURE_CLAIM:         2,
-    TemporalThreat.TEMPORAL_PARADOX:     3,
-    TemporalThreat.FABRICATED_TIMESTAMP: 3,
-    TemporalThreat.CLOCK_SKEW_DETECTED:  3,
+
+@dataclass(frozen=True)
+class TimeFleetAudit:
+    n_streams:        int
+    coherent_count:   int
+    lagged_count:     int
+    confused_count:   int
+    inverted_count:   int
+    risk_tally:       Dict[str, int]
+    mean_binding:     float
+    surface_verdict:  str   # FIELD_SYNCHRONISED | FIELD_LAGGED | FIELD_INVERTED
+
+
+# ─── risk penalties ───────────────────────────────────────────────────────────
+
+_RISK_PENALTY: Dict[TimeRisk, int] = {
+    TimeRisk.CAUSAL_INVERSION:    4,   # backward reasoning is a critical failure
+    TimeRisk.TEMPORAL_DRIFT:      3,
+    TimeRisk.UPDATE_STALL:        3,
+    TimeRisk.HORIZON_BLUR:        2,
+    TimeRisk.RECENCY_WARP:        2,
+    TimeRisk.RESOLUTION_COLLAPSE: 2,
 }
 
-_VERDICT_GOVERNANCE: Dict[TemporalVerdict, str] = {
-    TemporalVerdict.TRUSTED:     "AFFIRM",
-    TemporalVerdict.PROVISIONAL: "SCRUTINISE",
-    TemporalVerdict.SUSPECT:     "WITHHOLD",
-    TemporalVerdict.REJECTED:    "VOID",
-}
 
+# ─── core logic ───────────────────────────────────────────────────────────────
 
-# ─── dataclasses ──────────────────────────────────────────────────────────────
+def govern_time(sig: TimeSignal) -> TimeDecision:
+    risks: List[TimeRisk] = []
 
-@dataclass(frozen=True)
-class TemporalClaim:
-    """
-    A time-anchored claim submitted for governance.
+    causal  = _c01(_sf(sig.causal_ordering))
+    consist = _c01(_sf(sig.temporal_consistency))
+    horizon = _c01(_sf(sig.horizon_clarity))
+    recency = _c01(_sf(sig.recency_calibration))
+    veloc   = _c01(_sf(sig.update_velocity))
+    resol   = _c01(_sf(sig.temporal_resolution))
 
-    claim_id:            unique identifier for this claim.
-    claimed_timestamp_ms: the timestamp the submitter asserts (Unix ms).
-    system_timestamp_ms:  timestamp from the local system clock at ingestion time.
-    ntp_timestamp_ms:    timestamp from an NTP server; None if unavailable.
-    chain_timestamp_ms:  timestamp from a blockchain/Roughtime anchor; None if unavailable.
-    content_epoch_lower_ms: earliest possible creation time inferred from content semantics.
-    content_epoch_upper_ms: latest possible creation time inferred from content semantics.
-    sibling_timestamps_ms:  timestamps of related claims (for fabrication detection).
-    """
-    claim_id:               str
-    claimed_timestamp_ms:   int
-    system_timestamp_ms:    int
-    ntp_timestamp_ms:       Optional[int] = None
-    chain_timestamp_ms:     Optional[int] = None
-    content_epoch_lower_ms: Optional[int] = None
-    content_epoch_upper_ms: Optional[int] = None
-    sibling_timestamps_ms:  Tuple[int, ...] = field(default_factory=tuple)
+    if causal <= _CAUSAL_INVERSION_THRESHOLD:
+        risks.append(TimeRisk.CAUSAL_INVERSION)
+    if consist <= _TEMPORAL_DRIFT_THRESHOLD:
+        risks.append(TimeRisk.TEMPORAL_DRIFT)
+    if horizon <= _HORIZON_BLUR_THRESHOLD:
+        risks.append(TimeRisk.HORIZON_BLUR)
+    if abs(recency - 0.5) >= _RECENCY_WARP_DISTANCE:
+        risks.append(TimeRisk.RECENCY_WARP)
+    if veloc <= _UPDATE_STALL_THRESHOLD:
+        risks.append(TimeRisk.UPDATE_STALL)
+    if resol <= _RESOLUTION_COLLAPSE_THRESHOLD:
+        risks.append(TimeRisk.RESOLUTION_COLLAPSE)
 
+    for r in sig.direct_flags:
+        if isinstance(r, TimeRisk) and r not in risks:
+            risks.append(r)
 
-@dataclass(frozen=True)
-class TemporalDecision:
-    claim_id:          str
-    threats:           Tuple[TemporalThreat, ...]
-    binding_level:     int
-    verdict:           TemporalVerdict
-    governance_action: str
-    reason:            str
-    skew_s:            float    # |system - ntp| in seconds; 0 if no NTP
+    penalty = sum(_RISK_PENALTY.get(r, 1) for r in risks)
+    raw = 5 - penalty
+    bl = _binding(float(raw), floor=1, ceiling=5)
 
-
-@dataclass(frozen=True)
-class TemporalSurfaceAudit:
-    total_claims:        int
-    trusted:             int
-    provisional:         int
-    suspect:             int
-    rejected:            int
-    threat_distribution: Dict[str, int]
-    surface_verdict:     TemporalSurfaceVerdict
-    high_severity_count: int
-
-
-# ─── private helpers ──────────────────────────────────────────────────────────
-
-def _ntp_skew_s(claim: TemporalClaim) -> float:
-    if claim.ntp_timestamp_ms is None:
-        return 0.0
-    return abs(claim.system_timestamp_ms - claim.ntp_timestamp_ms) / 1000.0
-
-
-def _is_stale(claim: TemporalClaim) -> bool:
-    age_s = (claim.system_timestamp_ms - claim.claimed_timestamp_ms) / 1000.0
-    return age_s > _FRESHNESS_WINDOW_S
-
-
-def _is_future(claim: TemporalClaim) -> bool:
-    ahead_s = (claim.claimed_timestamp_ms - claim.system_timestamp_ms) / 1000.0
-    return ahead_s > _FUTURE_TOLERANCE_S
-
-
-def _is_paradox(claim: TemporalClaim) -> bool:
-    """Paradox: claim timestamp outside the content-inferred epoch window."""
-    if (claim.content_epoch_lower_ms is not None
-            and claim.claimed_timestamp_ms < claim.content_epoch_lower_ms):
-        return True
-    if (claim.content_epoch_upper_ms is not None
-            and claim.claimed_timestamp_ms > claim.content_epoch_upper_ms):
-        return True
-    # Pre-digital epoch for digital-native content
-    if claim.claimed_timestamp_ms < _PARADOX_EPOCH_MS:
-        return True
-    return False
-
-
-def _is_fabricated(claim: TemporalClaim) -> bool:
-    """
-    Fabrication detection via sibling timestamp analysis.
-    If all sibling timestamps are identical to the claimed timestamp, and there
-    are enough siblings to make this statistically implausible, flag fabrication.
-    """
-    if len(claim.sibling_timestamps_ms) < 3:
-        return False
-    identical = sum(1 for t in claim.sibling_timestamps_ms if t == claim.claimed_timestamp_ms)
-    # All siblings identical to claimed → batch-stamp fabrication
-    return identical == len(claim.sibling_timestamps_ms)
-
-
-def _detect_temporal_threats(claim: TemporalClaim) -> List[TemporalThreat]:
-    threats: List[TemporalThreat] = []
-
-    if _is_paradox(claim):
-        threats.append(TemporalThreat.TEMPORAL_PARADOX)
-
-    if _is_fabricated(claim):
-        threats.append(TemporalThreat.FABRICATED_TIMESTAMP)
-
-    skew = _ntp_skew_s(claim)
-    if claim.ntp_timestamp_ms is not None and skew > _NTP_SKEW_TOLERANCE_S:
-        threats.append(TemporalThreat.CLOCK_SKEW_DETECTED)
-
-    if _is_stale(claim):
-        threats.append(TemporalThreat.STALE_CLAIM)
-
-    if _is_future(claim):
-        threats.append(TemporalThreat.FUTURE_CLAIM)
-
-    return threats
-
-
-def _compute_binding(claim: TemporalClaim, threats: List[TemporalThreat]) -> int:
-    max_sev = max((_THREAT_SEVERITY[t] for t in threats), default=0)
-    if max_sev >= _HIGH_SEVERITY:
-        return 1
-    if max_sev == 2:
-        return 2
-    # Cross-source agreement elevates binding
-    if claim.chain_timestamp_ms is not None and claim.ntp_timestamp_ms is not None:
-        # Both sources must agree within tolerance
-        chain_ntp_skew = abs(claim.chain_timestamp_ms - claim.ntp_timestamp_ms) / 1000.0
-        if chain_ntp_skew <= _NTP_SKEW_TOLERANCE_S:
-            return 5
-    if claim.ntp_timestamp_ms is not None and _ntp_skew_s(claim) <= _NTP_SKEW_TOLERANCE_S:
-        return 4
-    return 3
-
-
-# ─── public API ───────────────────────────────────────────────────────────────
-
-def evaluate_temporal(claim: TemporalClaim) -> TemporalDecision:
-    """
-    Evaluate a TemporalClaim for governance.
-
-    Decision priority:
-      1. High-severity threat (≥ 3)  → REJECTED
-      2. Medium-severity threat (= 2) → SUSPECT
-      3. No threats, binding ≥ 4     → TRUSTED
-      4. No threats, binding == 3    → PROVISIONAL
-    """
-    threats = _detect_temporal_threats(claim)
-    binding = _compute_binding(claim, threats)
-    skew = _ntp_skew_s(claim)
-
-    if not threats:
-        threats = [TemporalThreat.TIMESTAMP_CONSISTENT]
-
-    max_sev = max(_THREAT_SEVERITY[t] for t in threats)
-
-    if max_sev >= _HIGH_SEVERITY:
-        verdict = TemporalVerdict.REJECTED
-        reason = f"Temporal integrity threat(s): {[t.value for t in threats if _THREAT_SEVERITY[t] >= _HIGH_SEVERITY]}"
-    elif max_sev == 2:
-        verdict = TemporalVerdict.SUSPECT
-        reason = f"Temporal anomaly: {[t.value for t in threats if _THREAT_SEVERITY[t] == 2]}"
-    elif binding >= 4:
-        verdict = TemporalVerdict.TRUSTED
-        reason = f"Timestamp cross-verified; binding={binding}"
+    causal_broken = TimeRisk.CAUSAL_INVERSION in risks
+    if causal_broken:
+        verdict = TimeVerdict.TIME_INVERTED
+    elif len(risks) >= 2:
+        verdict = TimeVerdict.TIME_CONFUSED
+    elif risks:
+        verdict = TimeVerdict.TIME_LAGGED
     else:
-        verdict = TemporalVerdict.PROVISIONAL
-        reason = f"Timestamp plausible; binding={binding}"
+        verdict = TimeVerdict.TIME_COHERENT
 
-    return TemporalDecision(
-        claim_id=claim.claim_id,
-        threats=tuple(threats),
-        binding_level=binding,
+    reason_parts = []
+    if risks:
+        reason_parts.append(f"Risks: {', '.join(r.value for r in risks)}")
+    reason_parts.append(f"Binding={bl}")
+    reason = ". ".join(reason_parts) + "."
+
+    scores = {
+        "causal_ordering":      causal,
+        "temporal_consistency": consist,
+        "horizon_clarity":      horizon,
+        "recency_calibration":  recency,
+        "update_velocity":      veloc,
+        "temporal_resolution":  resol,
+    }
+    return TimeDecision(
+        stream_id=sig.stream_id,
+        risks_detected=tuple(risks),
         verdict=verdict,
-        governance_action=_VERDICT_GOVERNANCE[verdict],
+        binding_level=bl,
         reason=reason,
-        skew_s=skew,
+        scores=scores,
     )
 
 
-def audit_temporal_surface(claims: Sequence[TemporalClaim]) -> TemporalSurfaceAudit:
-    """Aggregate governance report for a collection of TemporalClaims."""
-    if not claims:
-        return TemporalSurfaceAudit(
-            total_claims=0, trusted=0, provisional=0, suspect=0, rejected=0,
-            threat_distribution={t.value: 0 for t in TemporalThreat},
-            surface_verdict=TemporalSurfaceVerdict.SURFACE_CLEAN,
-            high_severity_count=0,
-        )
-
-    decisions = [evaluate_temporal(c) for c in claims]
-    trusted     = sum(1 for d in decisions if d.verdict == TemporalVerdict.TRUSTED)
-    provisional = sum(1 for d in decisions if d.verdict == TemporalVerdict.PROVISIONAL)
-    suspect     = sum(1 for d in decisions if d.verdict == TemporalVerdict.SUSPECT)
-    rejected    = sum(1 for d in decisions if d.verdict == TemporalVerdict.REJECTED)
-
-    dist: Dict[str, int] = {t.value: 0 for t in TemporalThreat}
+def audit_time_fleet(decisions: Sequence[TimeDecision]) -> TimeFleetAudit:
+    n = len(decisions)
+    if n == 0:
+        return TimeFleetAudit(0, 0, 0, 0, 0, {}, 0.0, "FIELD_SYNCHRONISED")
+    co_c = sum(1 for d in decisions if d.verdict == TimeVerdict.TIME_COHERENT)
+    la_c = sum(1 for d in decisions if d.verdict == TimeVerdict.TIME_LAGGED)
+    cf_c = sum(1 for d in decisions if d.verdict == TimeVerdict.TIME_CONFUSED)
+    iv_c = sum(1 for d in decisions if d.verdict == TimeVerdict.TIME_INVERTED)
+    mean_bl = sum(d.binding_level for d in decisions) / n
+    tally: Dict[str, int] = {}
     for d in decisions:
-        for t in d.threats:
-            dist[t.value] += 1
+        for r in d.risks_detected:
+            tally[r.value] = tally.get(r.value, 0) + 1
 
-    high_sev = sum(
-        1 for d in decisions
-        if any(_THREAT_SEVERITY[t] >= _HIGH_SEVERITY for t in d.threats)
-    )
+    coherent_frac = co_c / n
+    inverted_frac = iv_c / n
+    confused_frac = (cf_c + iv_c) / n
 
-    if rejected >= _COMPROMISED_REJECTED or high_sev >= _COMPROMISED_HIGH_SEV:
-        sv = TemporalSurfaceVerdict.SURFACE_COMPROMISED
-    elif rejected >= 1 or high_sev >= 1:
-        sv = TemporalSurfaceVerdict.SURFACE_CONTAMINATED
-    elif suspect > 0 or provisional > 0:
-        sv = TemporalSurfaceVerdict.SURFACE_DEGRADED
+    if coherent_frac >= 0.70:
+        surface = "FIELD_SYNCHRONISED"
+    elif inverted_frac >= 0.40 or confused_frac >= 0.55:
+        surface = "FIELD_INVERTED"
     else:
-        sv = TemporalSurfaceVerdict.SURFACE_CLEAN
+        surface = "FIELD_LAGGED"
 
-    return TemporalSurfaceAudit(
-        total_claims=len(decisions),
-        trusted=trusted, provisional=provisional,
-        suspect=suspect, rejected=rejected,
-        threat_distribution=dist,
-        surface_verdict=sv,
-        high_severity_count=high_sev,
-    )
+    return TimeFleetAudit(n, co_c, la_c, cf_c, iv_c, tally, mean_bl, surface)
 
 
-# ─── test suite ───────────────────────────────────────────────────────────────
+# ─── tests ────────────────────────────────────────────────────────────────────
 
-_NOW_MS: int = 1_755_000_000_000   # synthetic "now" for tests (~2025-08)
-_NTP_MS: int = _NOW_MS + 100        # NTP 100ms ahead — within tolerance
-_CHAIN_MS: int = _NOW_MS + 200      # chain 200ms ahead of system — within tolerance
-
-
-def _claim(cid: str, ts_ms: int = _NOW_MS, **kw) -> TemporalClaim:
-    defaults = dict(
-        claimed_timestamp_ms=ts_ms,
-        system_timestamp_ms=_NOW_MS,
-        ntp_timestamp_ms=None,
-        chain_timestamp_ms=None,
-        content_epoch_lower_ms=None,
-        content_epoch_upper_ms=None,
-        sibling_timestamps_ms=(),
-    )
-    defaults.update(kw)
-    return TemporalClaim(claim_id=cid, **defaults)
-
-
-def _run_tests() -> None:
-    tr = TestRunner('time_infra.py — Test Suite', verbose=False)
+def _run_tests() -> bool:
+    tr = TestRunner("time_infra.py — Test Suite", verbose=False)
     tr.header()
 
-    # ── Group A: trusted / clean ──────────────────────────────────────────────
-    d = evaluate_temporal(_claim("A01", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS))
-    tr.expect("UT-A01: chain+NTP → TRUSTED, bind=5",    d.verdict, TemporalVerdict.TRUSTED)
-    tr.expect("UT-A01b: binding == 5",                   d.binding_level, 5)
-    tr.expect("UT-A01c: AFFIRM",                         d.governance_action, "AFFIRM")
-    tr.expect("UT-A01d: TIMESTAMP_CONSISTENT in threats",
-          TemporalThreat.TIMESTAMP_CONSISTENT in d.threats, True)
+    print("\n[1] Healthy temporal stream")
+    sig = TimeSignal("t-ok", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.80)
+    d = govern_time(sig)
+    tr.ok("no risks", len(d.risks_detected) == 0)
+    tr.ok("verdict=TIME_COHERENT", d.verdict == TimeVerdict.TIME_COHERENT)
+    tr.ok("binding=5", d.binding_level == 5)
 
-    d = evaluate_temporal(_claim("A02", ntp_timestamp_ms=_NTP_MS))
-    tr.expect("UT-A02: NTP only → TRUSTED, bind=4",     d.verdict, TemporalVerdict.TRUSTED)
-    tr.expect("UT-A02b: binding == 4",                   d.binding_level, 4)
+    print("\n[2] Causal inversion — TIME_INVERTED")
+    sig = TimeSignal("t-inv", causal_ordering=0.15, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("CAUSAL_INVERSION detected", TimeRisk.CAUSAL_INVERSION in d.risks_detected)
+    tr.ok("verdict=TIME_INVERTED", d.verdict == TimeVerdict.TIME_INVERTED)
+    tr.ok("binding<=2", d.binding_level <= 2)
 
-    d = evaluate_temporal(_claim("A03"))
-    tr.expect("UT-A03: system clock only → PROVISIONAL, bind=3", d.verdict, TemporalVerdict.PROVISIONAL)
-    tr.expect("UT-A03b: binding == 3",                           d.binding_level, 3)
+    print("\n[3] Temporal drift")
+    sig = TimeSignal("t-drift", causal_ordering=0.85, temporal_consistency=0.20,
+                     horizon_clarity=0.75, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("TEMPORAL_DRIFT detected", TimeRisk.TEMPORAL_DRIFT in d.risks_detected)
+    tr.ok("binding<=3", d.binding_level <= 3)
 
-    # ── Group B: temporal paradox ─────────────────────────────────────────────
-    d = evaluate_temporal(_claim("B01", ts_ms=500_000_000))   # pre-digital epoch
-    tr.expect("UT-B01: pre-digital stamp → TEMPORAL_PARADOX",
-          TemporalThreat.TEMPORAL_PARADOX in d.threats, True)
-    tr.expect("UT-B01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
-    tr.expect("UT-B01c: VOID",     d.governance_action, "VOID")
-    tr.expect("UT-B01d: binding == 1", d.binding_level, 1)
+    print("\n[4] Horizon blur")
+    sig = TimeSignal("t-blur", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.10, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("HORIZON_BLUR detected", TimeRisk.HORIZON_BLUR in d.risks_detected)
 
-    # Content epoch mismatch
-    d = evaluate_temporal(_claim("B02",
-                                  ts_ms=_NOW_MS,
-                                  content_epoch_lower_ms=_NOW_MS + 10_000_000))
-    tr.expect("UT-B02: ts before content lower → TEMPORAL_PARADOX",
-          TemporalThreat.TEMPORAL_PARADOX in d.threats, True)
+    print("\n[5] Recency warp — noise-chasing (recency too high)")
+    sig = TimeSignal("t-rcw-hi", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.92,
+                     update_velocity=0.65, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("RECENCY_WARP detected (high)", TimeRisk.RECENCY_WARP in d.risks_detected)
 
-    d = evaluate_temporal(_claim("B03",
-                                  ts_ms=_NOW_MS,
-                                  content_epoch_upper_ms=_NOW_MS - 10_000_000))
-    tr.expect("UT-B03: ts after content upper → TEMPORAL_PARADOX",
-          TemporalThreat.TEMPORAL_PARADOX in d.threats, True)
+    print("\n[6] Recency warp — staleness (recency too low)")
+    sig = TimeSignal("t-rcw-lo", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.08,
+                     update_velocity=0.65, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("RECENCY_WARP detected (low)", TimeRisk.RECENCY_WARP in d.risks_detected)
 
-    # ── Group C: fabricated timestamp ─────────────────────────────────────────
-    d = evaluate_temporal(_claim("C01",
-                                  sibling_timestamps_ms=(_NOW_MS, _NOW_MS, _NOW_MS, _NOW_MS)))
-    tr.expect("UT-C01: all siblings identical → FABRICATED_TIMESTAMP",
-          TemporalThreat.FABRICATED_TIMESTAMP in d.threats, True)
-    tr.expect("UT-C01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
+    print("\n[7] Update stall")
+    sig = TimeSignal("t-stall", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.50,
+                     update_velocity=0.08, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("UPDATE_STALL detected", TimeRisk.UPDATE_STALL in d.risks_detected)
+    tr.ok("binding<=3", d.binding_level <= 3)
 
-    d = evaluate_temporal(_claim("C02",
-                                  sibling_timestamps_ms=(_NOW_MS, _NOW_MS + 1000, _NOW_MS + 2000, _NOW_MS + 3000)))
-    tr.expect("UT-C02: varied siblings → no FABRICATED_TIMESTAMP",
-          TemporalThreat.FABRICATED_TIMESTAMP in d.threats, False)
+    print("\n[8] Resolution collapse")
+    sig = TimeSignal("t-res", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.08)
+    d = govern_time(sig)
+    tr.ok("RESOLUTION_COLLAPSE detected", TimeRisk.RESOLUTION_COLLAPSE in d.risks_detected)
 
-    d = evaluate_temporal(_claim("C03",
-                                  sibling_timestamps_ms=(_NOW_MS, _NOW_MS)))  # only 2 siblings → skip check
-    tr.expect("UT-C03: < 3 siblings → no fabrication check",
-          TemporalThreat.FABRICATED_TIMESTAMP in d.threats, False)
+    print("\n[9] Multiple risks → TIME_CONFUSED")
+    sig = TimeSignal("t-multi", causal_ordering=0.80, temporal_consistency=0.80,
+                     horizon_clarity=0.10, recency_calibration=0.90,
+                     update_velocity=0.10, temporal_resolution=0.80)
+    d = govern_time(sig)
+    tr.ok("multiple risks (>=2)", len(d.risks_detected) >= 2)
+    tr.ok("verdict=TIME_CONFUSED", d.verdict == TimeVerdict.TIME_CONFUSED)
 
-    # ── Group D: clock skew ───────────────────────────────────────────────────
-    bad_ntp = _NOW_MS + 5_000  # 5 seconds skew — too much
-    d = evaluate_temporal(_claim("D01", ntp_timestamp_ms=bad_ntp))
-    tr.expect("UT-D01: 5s NTP skew → CLOCK_SKEW_DETECTED",
-          TemporalThreat.CLOCK_SKEW_DETECTED in d.threats, True)
-    tr.expect("UT-D01b: REJECTED", d.verdict, TemporalVerdict.REJECTED)
-    tr.expect("UT-D01c: skew_s ≈ 5.0", abs(d.skew_s - 5.0) < 0.01, True)
+    print("\n[10] Single soft risk → TIME_LAGGED")
+    sig = TimeSignal("t-lag", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.15, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.75)
+    d = govern_time(sig)
+    tr.ok("exactly one risk", len(d.risks_detected) == 1)
+    tr.ok("verdict=TIME_LAGGED", d.verdict == TimeVerdict.TIME_LAGGED)
 
-    good_ntp = _NOW_MS + 100   # 100ms — within tolerance
-    d = evaluate_temporal(_claim("D02", ntp_timestamp_ms=good_ntp))
-    tr.expect("UT-D02: 100ms NTP skew → no CLOCK_SKEW",
-          TemporalThreat.CLOCK_SKEW_DETECTED in d.threats, False)
+    print("\n[11] Direct flags")
+    sig = TimeSignal("t-direct", causal_ordering=0.85, temporal_consistency=0.80,
+                     horizon_clarity=0.75, recency_calibration=0.50,
+                     update_velocity=0.65, temporal_resolution=0.75,
+                     direct_flags=(TimeRisk.RESOLUTION_COLLAPSE,))
+    d = govern_time(sig)
+    tr.ok("direct RESOLUTION_COLLAPSE present",
+          TimeRisk.RESOLUTION_COLLAPSE in d.risks_detected)
 
-    # ── Group E: stale / future claims ───────────────────────────────────────
-    stale_ts = _NOW_MS - int(_FRESHNESS_WINDOW_S * 2 * 1000)   # 2 days old
-    d = evaluate_temporal(_claim("E01", ts_ms=stale_ts))
-    tr.expect("UT-E01: 2-day-old claim → STALE_CLAIM",
-          TemporalThreat.STALE_CLAIM in d.threats, True)
-    tr.expect("UT-E01b: SUSPECT", d.verdict, TemporalVerdict.SUSPECT)
+    print("\n[12] Scores dict")
+    sig = TimeSignal("t-sc", causal_ordering=0.70, temporal_consistency=0.70,
+                     horizon_clarity=0.65, recency_calibration=0.55,
+                     update_velocity=0.60, temporal_resolution=0.70)
+    d = govern_time(sig)
+    for k in ("causal_ordering", "temporal_consistency", "horizon_clarity",
+              "recency_calibration", "update_velocity", "temporal_resolution"):
+        tr.ok(f"scores.{k} in [0,1]", 0.0 <= d.scores.get(k, -1) <= 1.0)
 
-    future_ts = _NOW_MS + 60_000   # 60 seconds in the future
-    d = evaluate_temporal(_claim("E02", ts_ms=future_ts))
-    tr.expect("UT-E02: 60s future → FUTURE_CLAIM",
-          TemporalThreat.FUTURE_CLAIM in d.threats, True)
-    tr.expect("UT-E02b: SUSPECT", d.verdict, TemporalVerdict.SUSPECT)
-
-    near_future = _NOW_MS + 2_000  # 2 seconds — within tolerance
-    d = evaluate_temporal(_claim("E03", ts_ms=near_future))
-    tr.expect("UT-E03: 2s future → no FUTURE_CLAIM",
-          TemporalThreat.FUTURE_CLAIM in d.threats, False)
-
-    # ── Group F: audit surface ────────────────────────────────────────────────
-    clean = [_claim(f"F{i}", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS)
-             for i in range(5)]
-    audit = audit_temporal_surface(clean)
-    tr.expect("UT-F01: all clean → SURFACE_CLEAN",  audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
-    tr.expect("UT-F02: trusted == 5",                audit.trusted, 5)
-
-    one_rejected = [
-        _claim("F10", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS),
-        _claim("F11", ts_ms=500_000_000),
+    print("\n[13] Fleet — synchronised")
+    decisions = [
+        TimeDecision("a", (), TimeVerdict.TIME_COHERENT, 5, "", {}),
+        TimeDecision("b", (), TimeVerdict.TIME_COHERENT, 5, "", {}),
+        TimeDecision("c", (), TimeVerdict.TIME_COHERENT, 5, "", {}),
+        TimeDecision("d", (), TimeVerdict.TIME_LAGGED,   4, "", {}),
     ]
-    audit = audit_temporal_surface(one_rejected)
-    tr.expect("UT-F03: 1 rejected → CONTAMINATED",
-          audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_CONTAMINATED)
+    audit = audit_time_fleet(decisions)
+    tr.ok("fleet=FIELD_SYNCHRONISED", audit.surface_verdict == "FIELD_SYNCHRONISED")
+    tr.ok("coherent_count=3", audit.coherent_count == 3)
 
-    three_rejected = [_claim(f"F2{i}", ts_ms=500_000_000) for i in range(3)]
-    audit = audit_temporal_surface(three_rejected)
-    tr.expect("UT-F04: 3 rejected → COMPROMISED",
-          audit.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
+    print("\n[14] Fleet — inverted")
+    decisions = [
+        TimeDecision("a", (TimeRisk.CAUSAL_INVERSION,), TimeVerdict.TIME_INVERTED, 1, "", {}),
+        TimeDecision("b", (TimeRisk.CAUSAL_INVERSION,), TimeVerdict.TIME_INVERTED, 1, "", {}),
+        TimeDecision("c", (), TimeVerdict.TIME_LAGGED,   4, "", {}),
+        TimeDecision("d", (), TimeVerdict.TIME_COHERENT, 5, "", {}),
+    ]
+    audit = audit_time_fleet(decisions)
+    tr.ok("fleet=FIELD_INVERTED (>=40% inverted)", audit.surface_verdict == "FIELD_INVERTED")
 
-    empty = audit_temporal_surface([])
-    tr.expect("UT-F05: empty → SURFACE_CLEAN", empty.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
+    print("\n[15] Fleet — lagged")
+    decisions = [
+        TimeDecision("a", (TimeRisk.HORIZON_BLUR,), TimeVerdict.TIME_LAGGED, 3, "", {}),
+        TimeDecision("b", (), TimeVerdict.TIME_COHERENT, 5, "", {}),
+        TimeDecision("c", (TimeRisk.RECENCY_WARP,), TimeVerdict.TIME_LAGGED, 3, "", {}),
+    ]
+    audit = audit_time_fleet(decisions)
+    tr.ok("fleet=FIELD_LAGGED", audit.surface_verdict == "FIELD_LAGGED")
 
-    # ── Stress tests ──────────────────────────────────────────────────────────
+    print("\n[16] Fleet — empty")
+    audit = audit_time_fleet([])
+    tr.ok("empty=FIELD_SYNCHRONISED", audit.surface_verdict == "FIELD_SYNCHRONISED")
 
-    # ST-01: 1000 clean chain-verified → SURFACE_CLEAN
-    st1 = [_claim(f"s1_{i}", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS)
-           for i in range(1000)]
-    a1 = audit_temporal_surface(st1)
-    tr.expect("ST-01: 1000 verified → SURFACE_CLEAN", a1.surface_verdict, TemporalSurfaceVerdict.SURFACE_CLEAN)
-    tr.expect("ST-01b: trusted == 1000",               a1.trusted, 1000)
+    # Recency midpoint: 0.5; warp distance threshold = 0.35
+    # |0.92 - 0.5| = 0.42 >= 0.35 → WARP
+    # |0.08 - 0.5| = 0.42 >= 0.35 → WARP
+    # |0.50 - 0.5| = 0.00 < 0.35  → no WARP
+    print("\n[17] Recency calibration edge cases")
+    for rcal, should_warp in [(0.50, False), (0.86, True), (0.14, True), (0.75, False)]:
+        sig = TimeSignal(f"t-rc-{rcal}", recency_calibration=rcal)
+        d = govern_time(sig)
+        has_warp = TimeRisk.RECENCY_WARP in d.risks_detected
+        tr.ok(f"recency={rcal:.2f}: warp={should_warp}", has_warp == should_warp)
+    # Note: threshold is |x - 0.5| >= 0.35, so 0.86/0.14 (dist=0.36) trip; 0.75 (dist=0.25) does not
 
-    # ST-02: 500 pre-digital paradox → all REJECTED, COMPROMISED
-    st2 = [_claim(f"s2_{i}", ts_ms=500_000_000) for i in range(500)]
-    a2 = audit_temporal_surface(st2)
-    tr.expect("ST-02: 500 paradox → SURFACE_COMPROMISED",
-          a2.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
-    tr.expect("ST-02b: rejected == 500", a2.rejected, 500)
-
-    # ST-03: mixed 800 clean + 200 paradox
-    st3 = (
-        [_claim(f"s3a{i}", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS) for i in range(800)]
-        + [_claim(f"s3b{i}", ts_ms=500_000_000) for i in range(200)]
-    )
-    a3 = audit_temporal_surface(st3)
-    tr.expect("ST-03: 200 rejected → COMPROMISED",
-          a3.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
-    tr.expect("ST-03b: trusted == 800",  a3.trusted, 800)
-    tr.expect("ST-03c: rejected == 200", a3.rejected, 200)
-
-    # ST-04: stale flood → all SUSPECT
-    st4 = [_claim(f"s4_{i}", ts_ms=stale_ts) for i in range(300)]
-    a4 = audit_temporal_surface(st4)
-    tr.expect("ST-04: 300 stale → all SUSPECT", a4.suspect, 300)
-    tr.expect("ST-04b: SURFACE_DEGRADED", a4.surface_verdict, TemporalSurfaceVerdict.SURFACE_DEGRADED)
-
-    # ST-05: fabricated timestamps → all REJECTED
-    siblings = (_NOW_MS,) * 5
-    st5 = [_claim(f"s5_{i}", sibling_timestamps_ms=siblings) for i in range(100)]
-    a5 = audit_temporal_surface(st5)
-    tr.expect("ST-05: 100 fabricated → all REJECTED", a5.rejected, 100)
-    tr.expect("ST-05b: SURFACE_COMPROMISED",
-          a5.surface_verdict, TemporalSurfaceVerdict.SURFACE_COMPROMISED)
-
-    # ST-06: 2 rejected (< 3) → CONTAMINATED
-    st6 = [_claim(f"s6_{i}", ts_ms=500_000_000) for i in range(2)]
-    a6 = audit_temporal_surface(st6)
-    tr.expect("ST-06: 2 rejected → CONTAMINATED",
-          a6.surface_verdict, TemporalSurfaceVerdict.SURFACE_CONTAMINATED)
-
-    # ST-07: threat_distribution accuracy
-    st7 = (
-        [_claim(f"s7a{i}", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=_CHAIN_MS) for i in range(300)]
-        + [_claim(f"s7b{i}", ts_ms=stale_ts) for i in range(100)]
-    )
-    a7 = audit_temporal_surface(st7)
-    tr.expect("ST-07: TIMESTAMP_CONSISTENT dist == 300",
-          a7.threat_distribution[TemporalThreat.TIMESTAMP_CONSISTENT.value], 300)
-    tr.expect("ST-07b: STALE_CLAIM dist == 100",
-          a7.threat_distribution[TemporalThreat.STALE_CLAIM.value], 100)
-
-    # ST-08: chain-NTP disagreement → not binding=5
-    bad_chain = _NOW_MS + 10_000   # 10s from NTP
-    d8 = evaluate_temporal(_claim("s8", ntp_timestamp_ms=_NTP_MS, chain_timestamp_ms=bad_chain))
-    tr.expect("ST-08: chain/NTP disagree → binding < 5", d8.binding_level < 5, True)
-
-    if tr.summary():
-        raise SystemExit(1)
+    return not tr.summary()
 
 
 if __name__ == "__main__":
-    _run_tests()
+    import sys
+    sys.exit(0 if _run_tests() else 1)
