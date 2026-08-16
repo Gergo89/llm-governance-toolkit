@@ -1,0 +1,274 @@
+name: Publish Documentation
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'docs/**'
+      - 'llm-governance-toolkit/**'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.github/workflows/publish-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs mkdocs-material pymdown-extensions
+
+      - name: Create MkDocs configuration
+        run: |
+          cat > mkdocs.yml << 'EOF'
+          site_name: AGI Platform Documentation
+          site_description: LLM Governance Toolkit & Infrastructure Platform
+          site_url: https://yourusername.github.io/llm-governance-toolkit/
+          repo_url: https://github.com/Gergo89/llm-governance-toolkit
+          repo_name: llm-governance-toolkit
+          edit_uri: edit/main/docs/
+          
+          theme:
+            name: material
+            logo: assets/logo.png
+            favicon: assets/favicon.ico
+            features:
+              - navigation.tabs
+              - navigation.sections
+              - navigation.top
+              - search.suggest
+              - search.highlight
+              - content.tabs.link
+              - content.code.annotation
+              - content.code.copy
+            palette:
+              - scheme: default
+                toggle:
+                  icon: material/brightness-7
+                  name: Switch to dark mode
+              - scheme: slate
+                toggle:
+                  icon: material/brightness-4
+                  name: Switch to light mode
+          
+          markdown_extensions:
+            - pymdownx.arithmatex
+            - pymdownx.superfences
+            - pymdownx.details
+            - pymdownx.tabbed:
+                alternate_style: true
+            - attr_list
+            - md_in_html
+            - toc:
+                permalink: true
+          
+          nav:
+            - Home: index.md
+            - Getting Started:
+                - Overview: getting-started.md
+                - Installation: installation.md
+                - Quick Start: quickstart.md
+            - Deployment:
+                - AWS Deployment: deployment/aws.md
+                - Kubernetes Deployment: deployment/kubernetes.md
+                - Production Checklist: deployment/production.md
+            - Architecture:
+                - Architecture Guide: architecture/overview.md
+                - Threat Model: architecture/threat-model.md
+                - Operations: architecture/operations.md
+            - API Reference:
+                - Toolkit Overview: api/toolkit.md
+                - Tools: api/tools.md
+                - Patterns: api/patterns.md
+            - Development:
+                - Contributing: contributing.md
+                - Changelog: changelog.md
+            - Resources:
+                - Research Papers: resources/papers.md
+                - FAQ: resources/faq.md
+                - Support: resources/support.md
+          EOF
+
+      - name: Prepare documentation
+        run: |
+          # Create docs directory
+          mkdir -p docs/docs/{deployment,architecture,api,resources,getting-started}
+          
+          # Copy main documents
+          cp README.md docs/docs/index.md
+          cp CHANGELOG.md docs/docs/changelog.md
+          cp docs/AWS_DEPLOYMENT.md docs/docs/deployment/aws.md
+          cp docs/KUBERNETES_DEPLOYMENT.md docs/docs/deployment/kubernetes.md
+          cp docs/PRODUCTION_CHECKLIST.md docs/docs/deployment/production.md
+          cp docs/ARCHITECTURE.md docs/docs/architecture/overview.md
+          cp docs/THREAT-MODEL.md docs/docs/architecture/threat-model.md
+          cp infra/OPERATIONS.md docs/docs/architecture/operations.md
+          cp llm-governance-toolkit/CONTRIBUTING.md docs/docs/contributing.md
+          cp llm-governance-toolkit/README.md docs/docs/api/toolkit.md
+          
+          # Create placeholder pages
+          cat > docs/docs/getting-started.md << 'EOF2'
+          # Getting Started
+          
+          Welcome to the AGI Platform documentation. This guide will help you get started quickly.
+          
+          ## Prerequisites
+          
+          - Python 3.11 or later
+          - Docker (for local development)
+          - Terraform (for AWS deployment)
+          - kubectl (for Kubernetes deployment)
+          
+          ## Next Steps
+          
+          1. [Read the Architecture Guide](../architecture/overview.md)
+          2. [Choose your deployment method](../deployment/aws.md)
+          3. [Explore the toolkit](../api/toolkit.md)
+          EOF2
+          
+          cat > docs/docs/installation.md << 'EOF2'
+          # Installation
+          
+          ## Python Package
+          
+          ```bash
+          pip install llm-governance-toolkit
+          ```
+          
+          ## From Source
+          
+          ```bash
+          git clone https://github.com/Gergo89/llm-governance-toolkit.git
+          cd llm-governance-toolkit
+          pip install -e ".[dev]"
+          ```
+          
+          ## Verify Installation
+          
+          ```python
+          import llm_governance_toolkit
+          print(llm_governance_toolkit.__version__)
+          ```
+          EOF2
+          
+          cat > docs/docs/quickstart.md << 'EOF2'
+          # Quick Start
+          
+          ## Local Development
+          
+          1. Clone the repository
+          2. Run \`docker compose up -d\`
+          3. Access services on localhost
+          4. Run tests with \`pytest\`
+          
+          ## Deploy to AWS
+          
+          See [AWS Deployment Guide](../deployment/aws.md)
+          
+          ## Deploy to Kubernetes
+          
+          See [Kubernetes Deployment Guide](../deployment/kubernetes.md)
+          EOF2
+          
+          cat > docs/docs/api/tools.md << 'EOF2'
+          # LLM Governance Tools
+          
+          See [Toolkit README](toolkit.md) for complete documentation.
+          EOF2
+          
+          cat > docs/docs/api/patterns.md << 'EOF2'
+          # Governance Patterns
+          
+          See [Toolkit README](toolkit.md) for pattern documentation.
+          EOF2
+          
+          cat > docs/docs/resources/papers.md << 'EOF2'
+          # Research Papers
+          
+          This section contains research papers on LLM governance and AI safety.
+          
+          See the [papers directory](../../llm-governance-toolkit/papers/) for the complete collection.
+          EOF2
+          
+          cat > docs/docs/resources/faq.md << 'EOF2'
+          # Frequently Asked Questions
+          
+          ## How do I contribute?
+          
+          See [CONTRIBUTING.md](../contributing.md)
+          
+          ## How do I report a security issue?
+          
+          See [SECURITY.md](../../SECURITY.md)
+          
+          ## What's the difference between AWS and Kubernetes deployment?
+          
+          - **AWS/ECS**: Managed by AWS, easier to set up initially
+          - **Kubernetes**: More portable, multi-cloud support
+          
+          Choose based on your infrastructure strategy.
+          EOF2
+          
+          cat > docs/docs/resources/support.md << 'EOF2'
+          # Support
+          
+          ## Getting Help
+          
+          - **GitHub Issues**: [Report bugs or request features](https://github.com/Gergo89/llm-governance-toolkit/issues)
+          - **GitHub Discussions**: [Ask questions and discuss](https://github.com/Gergo89/llm-governance-toolkit/discussions)
+          - **Email**: [Contact us](mailto:support@example.com)
+          
+          ## Resources
+          
+          - [Architecture Guide](../architecture/overview.md)
+          - [Deployment Guides](../deployment/)
+          - [API Reference](../ api/)
+          - [Research Papers](papers.md)
+          EOF2
+
+      - name: Build documentation
+        run: |
+          cd docs
+          mkdocs build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
