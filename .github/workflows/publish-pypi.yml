@@ -34,6 +34,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+          cache-dependency-path: |
+            llm-governance-toolkit/pyproject.toml
+            llm-governance-toolkit/requirements.txt
+
+      - name: Confirm package metadata exists
+        run: |
+          test -f llm-governance-toolkit/pyproject.toml
+          ls -la llm-governance-toolkit
 
       - name: Install build dependencies
         run: |
