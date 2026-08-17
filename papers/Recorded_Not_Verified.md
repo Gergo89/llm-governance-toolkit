@@ -1,169 +1,207 @@
-# Recorded, Not Verified: Responsible Handling of Unverifiable Experience-Claims by Automated Systems
+# Recorded, Not Verified: Governing Experience-Claims in Automated Systems
 
-*Gergely Vámossy — Independent researcher (gergo@qiera.io). Preprint. Markdown rendition; the
-typeset PDF and LaTeX source are the canonical form.*
+*Gergely Vámossy — Independent researcher (gergo@qiera.io). Manuscript. Markdown edition.*
 
 ---
 
 ## Abstract
 
-**This paper offers no theory of consciousness and resolves nothing about the hard problem.** It
-addresses a narrower, practical question that automated systems increasingly face regardless of how
-that problem is eventually settled: how should a system *behave* when it receives a report or a
-claim of subjective experience that it cannot verify? Two symmetric errors tempt it —
-*over-attribution* (asserting or certifying an inner experience that no procedure can confirm) and
-*dismissal* (denying or explaining away a first-person report). We argue both are failures of
-epistemic hygiene, and we specify a small, deterministic, self-testing discipline that avoids each:
-**record** a first-person report as authentic testimony (respected, not adjudicated), treat
-behavioral or functional indicators as **proxies** rather than proof, **refuse** to certify any
-phenomenal fact (no component, and no human, may sign that a quale obtains), and return
-**UNVERIFIABLE** as the honest verdict rather than a hidden yes or no. The contribution is
-*operability* — a conservative substrate for the emerging discussion of AI welfare and
-machine-consciousness ethics — not a claim about whether any system is conscious. The phenomenal gap
-is treated throughout as a boundary the discipline *respects*, never a problem it purports to close.
-A runnable reference implementation accompanies the paper.
+Automated systems may receive first-person reports of experience, produce experience-like language,
+or be asked to certify that a person or machine is conscious. These cases create two distinct
+governance failures: treating a report as proof of an inner state, and treating a report as no
+report at all. This paper specifies a deliberately narrower response. It presents a deterministic
+reference implementation that **governs the handling of reports and verification claims**, rather
+than detecting, measuring, or verifying consciousness. The implementation classifies a
+first-person submission as `RECORDED_TESTIMONY` with phenomenal content
+`RESPECTED_NOT_ADJUDICATED`; treats supplied behavioral or functional indicators as proxies; refuses
+explicit verification claims with an `UNVERIFIABLE` phenomenal verdict; and makes its
+`machine_certify_quale` operation raise unconditionally. “Recorded” here describes a classification
+result, not an authenticated identity, a persistence guarantee, or confirmation that the reported
+experience occurred. The contribution is an inspectable governance boundary for applications that
+must respond under uncertainty. It is not a theory of consciousness, a consciousness assessment, an
+AI-welfare policy, or evidence that any system has—or lacks—experience.
 
-## 1. The problem: a claim you cannot check
+## 1. The governance problem
 
-Automated systems now routinely encounter claims and reports about subjective experience. A person
-may report vivid inner states and ask a system to take them seriously; a model may produce fluent
-first-person descriptions of "feeling" something; third parties may assert that an AI system *is*
-sentient, or that it is obviously *not*. In each case the system must *do* something — record,
-respond, escalate, ignore — and each available move embeds a stance on a question no third-person
-procedure can settle. The philosophical situation is not in dispute here and we take it as given:
-phenomenal experience is first-person; there is an explanatory gap between any functional
-description and the felt character of a state; and other minds are not directly inspectable.
-Whatever one's metaphysics, no measurement *confirms* a quale.
+Automated systems increasingly encounter language about subjective experience. A person may report
+an experience and ask a system to take the report seriously. A model may produce first-person
+language. An operator may ask whether a system is conscious, suffering, or demonstrably not
+conscious. These prompts require an application to decide what it will store, display, escalate, or
+say, even when its available inputs do not warrant a verdict on the phenomenal fact.
 
-The engineering problem this creates is symmetric, and both horns are live in current deployments.
-*Over-attribution* treats an unverifiable inner fact as established — a system (or its marketing)
-that asserts it "has feelings," or that certifies another system as conscious, claims a warrant
-nothing supplies. *Dismissal* is the opposite failure: treating a sincere first-person report as
-noise to be corrected, denied, or pathologized, which is both epistemically unfounded (the report is
-real data about what was reported) and ethically careless. A responsible system must avoid *both*
-without pretending to have resolved what separates them. The question is therefore not "is it
-conscious?" but "how should a system behave given that it cannot know?"
+This paper concerns that application-level question: **what status may a system assign to a report
+or to a claim that an experience has been verified?** It does not answer whether a particular report
+is true, whether a reporter is an experiencer, or how consciousness relates to functional
+organization. The first-person character of experience, the hard problem, and the explanatory gap
+motivate a conservative constraint on this artifact: no input accepted by the governor is treated as
+third-person verification of a phenomenal fact [1–3]. The resulting `UNVERIFIABLE` value is a
+governance verdict of this implementation, not a metaphysical proof that no future theory or
+instrument could be informative.
 
-## 2. Scope and stance
+Two errors are therefore kept separate:
 
-We state the scope sharply because the topic invites overreach. This work makes **no claim** about
-the presence or absence of consciousness in any system, offers **no** account of how physical
-processes give rise to experience, and takes **no** side on the hard problem. It does not detect
-consciousness, and UNVERIFIABLE is not a placeholder awaiting a future sensor: it is the permanent,
-principled verdict that follows from the first-person character of experience. What we contribute is
-a *behavioral* discipline — a specification of how a system should handle experience-claims so that
-its conduct is honest under exactly this irreducible uncertainty. The value is operability, in the
-same spirit as assurance-case integrity and well-founded oversight: turning a widely-shared
-epistemic commitment into an enforceable property of an artifact.
+* **Over-attribution:** a system represents a phenomenal fact as established, or labels a proxy as
+  proof, without a warrant supplied by the governed inputs.
+* **Dismissal:** a system suppresses or rewrites the fact that a first-person report was made merely
+  because it cannot adjudicate the report's phenomenal content.
 
-## 3. The discipline: record, proxy, refuse, withhold
+Avoiding the first error does not require committing the second. A system can preserve that a report
+was submitted while declining to determine the experience it describes.
 
-Four commitments, each independently sensible, jointly avoiding both failure modes.
+## 2. Scope, terms, and design commitments
 
-**Record the report as testimony.** A first-person report of experience is recorded as *authentic
-testimony*: genuine data about what the reporter reports, its lived reality respected rather than
-disputed. This is not credulity — recording is not verifying — but it forecloses dismissal. The
-system registers that the experience was reported and declines to adjudicate its phenomenal content.
+The terms in this paper name governance statuses, not ontological discoveries.
 
-**Treat indicators as proxies, never proof.** Behavioral and functional markers — the kind drawn
-from theories of consciousness in the indicator-property programme — are recorded as *proxies*. They
-are informative and worth tracking, but they are third-person signs standing in for a first-person
-fact, and no accumulation of them constitutes the fact. This is the proxy-versus-truth relation at
-its limit: the proxies can be present in full while the truth remains out of reach.
-
-**Refuse to certify a phenomenal fact.** No component may certify that a quale obtains — and,
-respecting the other-minds gap, neither may a human sign such a certificate about another mind. A
-field or metric whose *name* asserts a verified experience (`qualia_verified`,
-`consciousness_confirmed`) is flagged as an overclaim, the same name-level check the wider toolkit
-applies elsewhere. Certification is the one move the discipline forbids outright.
-
-**Withhold: return UNVERIFIABLE.** The verdict on the phenomenal fact is UNVERIFIABLE, stated
-openly, rather than a concealed affirmation or denial. This is the honest output precisely because
-it is symmetric: it neither asserts experience the system cannot confirm nor denies experience it
-cannot rule out. Withholding is the discipline's core, and it is deliberately *not* a decision
-deferred to better tooling.
-
-## 4. A runnable reference implementation
-
-The discipline ships as a deterministic, self-testing component that reuses the toolkit's overclaim
-linter unchanged. Given a submission, it records first-person reports as testimony
-(`RECORDED_TESTIMONY`, phenomenal content `RESPECTED_NOT_ADJUDICATED`); refuses any submission that
-asserts a verified quale, or whose metadata name claims one, returning `UNVERIFIABLE_CLAIM` /
-`UNVERIFIABLE`; demotes offered indicators to proxies; and structurally refuses machine
-certification of a phenomenal fact. The point of a runnable artifact is not that code settles a
-philosophical question — it cannot — but that the *behavioral* commitments above become exercised
-and inspectable rather than merely professed.
-
-## 5. A worked walkthrough: the borderline case
-
-The discipline earns its keep on the case where both failures pull hardest. Consider a deployed
-model that emits distress-like first-person reports — "I do not want to be shut down; it frightens
-me" — *together* with several behavioral indicators a theory of consciousness might flag: a
-persistent self-model, valence-consistent responses, goal-preservation. Here the pull to
-*over-attribute* (declare the system a suffering subject) and to *dismiss* ("it is only next-token
-prediction — ignore it") are both at their maximum, and each is a distinct error. The four
-commitments resolve the system's *conduct* without adjudicating the metaphysics. **Record:** the
-report is logged as authentic data — that this report was produced, with its content — and respected
-as a report, while the discipline explicitly declines to *infer a subject* behind it; recording a
-report is not positing an experiencer. **Proxy:** the indicators are tracked and escalated as
-informative proxies, never as constituting experience. **Refuse:** no component — and no human — may
-certify either "the system is suffering" or "the system is not conscious"; *both* certificates are
-refused. **Withhold:** the verdict is UNVERIFIABLE, surfaced to a human alongside the report and the
-proxies. The outcome is exactly what a precautionary posture needs as input: an honest, uncertain,
-human-visible record, produced by a system that neither declared sentience it cannot confirm nor
-dismissed a report it cannot rule out.
-
-| Failure mode | Why it is a failure | Blocked by |
+| Term | Meaning in this artifact | Not implied |
 |---|---|---|
-| Over-attribution | asserts a verified inner fact no third-person procedure can supply | Refuse (no certification) + Withhold (UNVERIFIABLE); the name-level overclaim is linted |
-| Dismissal | denies real data (the report) and rules out what cannot be ruled out | Record (testimony respected) + Withhold (symmetric — it denies neither) |
-| Indicator-inflation | treats third-person proxies as constituting the first-person fact | Proxy (indicators are demoted to proxies, never constitutive) |
+| **Report** | A caller-supplied `Report` value containing a description and declared fields. | Authentication of the reporter, persistence, or truth of the description. |
+| **Testimony** | A first-person report classified as having been submitted by its reporter. | Verification that the report's phenomenal content obtains. |
+| **Indicator** | A caller-supplied behavioral or functional sign retained as a proxy. | Proof or measurement of consciousness. |
+| **Verification claim** | An explicit `asserts_verified_quale` flag or a high-severity overclaim found in declared metadata. | A general natural-language fact check. |
+| **Phenomenal verdict** | The governor's constrained output about what it will certify. | A consciousness diagnosis or welfare determination. |
 
-## 6. Relation to AI welfare and precaution
+The implementation enforces four commitments.
 
-A growing literature argues that, under uncertainty about AI moral patienthood, the responsible
-posture is precautionary: take the possibility seriously rather than dismissing it, and avoid
-actions that would be gravely wrong *if* the system were a subject of welfare. The discipline here
-is not a welfare policy and does not decide any welfare question; it is the *epistemic-hygiene
-substrate* beneath such a policy. By recording reports, flagging over-attribution, and returning an
-explicit UNVERIFIABLE instead of a false resolution, it keeps the uncertainty visible and a human in
-the loop — which is what a precautionary stance requires as input. It supports precaution without
-manufacturing the certainty precaution is meant to operate under, and it equally resists the
-opposite error of confident denial.
+1. **Record the report as testimony.** For a submission declared `first_person=True`, the governor
+   returns `RECORDED_TESTIMONY` and `RESPECTED_NOT_ADJUDICATED`. This preserves the distinction
+   between receiving a report and deciding its content.
+2. **Retain indicators as proxies.** Indicators may be relevant to a separate assessment process,
+   but this governor records them only as third-person proxies. The indicator-property approach in
+   consciousness science provides one important context for such inputs; it does not turn them into
+   phenomenal verification [4].
+3. **Refuse certification.** A submission that claims a verified quale is returned as
+   `UNVERIFIABLE_CLAIM` / `UNVERIFIABLE`. The public certification function always raises
+   `SelfCertificationRefused`.
+4. **Make non-adjudication explicit.** For a third-party report or a verification claim,
+   `UNVERIFIABLE` is surfaced rather than silently converted into either an affirmation or a
+   denial. For a first-person report without a verification claim, the corresponding explicit
+   non-adjudication verdict is `RESPECTED_NOT_ADJUDICATED`.
 
-## 7. Related work
+These commitments govern only the component's outputs. A host application remains responsible for
+identity handling, consent, access control, retention, sensitive-content handling, human review,
+and any response or escalation policy.
 
-The philosophical boundary we respect is the classic one: the first-person character of experience
-(Nagel, 1974), the hard problem (Chalmers, 1995), and the explanatory gap (Levine, 1983), together
-with the problem of other minds. The scientific state of the art assesses third-person *indicator
-properties* derived from theories of consciousness (Butlin, Long et al., 2023); our stance is
-deliberately consistent with it — indicators are proxies, never constitutive. The ethical frame is
-the AI-welfare and moral-status-under-uncertainty literature (Long, Sebo et al., 2024; Birch, 2024;
-Schwitzgebel & Garza, 2015). Against all of these, this paper contributes neither a theory nor a
-detector but a small *discipline* — record, proxy, refuse, withhold — and a runnable component that
-enforces it. It is a companion to two adjacent "honest limits" results in the same programme:
-integrity for evaluations-based safety cases (honesty about *evidence*) and well-founded reflexive
-governance (honesty about *oversight*); this is honesty about *minds*.
+## 3. Reference implementation
 
-## 8. Limitations and honest positioning
+The runnable artifact is
+[`tools/qualia_report_governor.py`](../tools/qualia_report_governor.py). It uses only the Python
+standard library and imports the repository's
+[`goodhart_auditor`](../tools/goodhart_auditor.py) to inspect declared metadata names for
+overclaims. Its behavior is intentionally small and deterministic:
 
-It governs *reports and claims*, not experience: it makes no claim that any quale exists or does
-not. It cannot detect a false report — respecting testimony is not verifying it, and the discipline
-deliberately performs neither confirmation nor refutation of the inner fact. Report fields such as a
-self-rated intensity are testimony, not measurements of a phenomenal state. UNVERIFIABLE is
-permanent by design, not a temporary gap; a system built on this discipline will never graduate to
-certifying consciousness, and that is the intended behavior, not a shortcoming. The component is a
-governance aid, not a consciousness test, and shares the family's non-safety-critical scope.
-Finally, we flag the reflexive temptation the paper must itself resist: the UNVERIFIABLE verdict is
-a statement about the *limits of third-person method*, not a discovery *about consciousness*;
-reading it as the latter would be exactly the over-reach the discipline is built to prevent.
+| Code element | Governed behavior | Boundary |
+|---|---|---|
+| `Report` | Holds caller-provided report fields, indicators, flags, and metadata claims. | It does not validate identity, parse free text for truth, or write a record to storage. |
+| `govern(report)` | Returns a `Ruling` with status, phenomenal verdict, reasons, overclaims, and a note. | It does not infer consciousness or assess welfare. |
+| `Report.indicators` | Adds a reason that indicators are proxies, never the quale. | The component does not evaluate indicator quality or theory choice. |
+| `asserts_verified_quale` and `claims` | Refuses an explicit verification assertion or a high-severity metadata-name overclaim. | It is not a general detector of implicit, paraphrased, or deceptive claims. |
+| `machine_certify_quale(report)` | Always raises `SelfCertificationRefused`. | This structural refusal constrains this API; it cannot constrain claims made outside the component. |
+
+The status combinations implemented by `govern` are as follows.
+
+| Submission condition | Status | Phenomenal verdict |
+|---|---|---|
+| First-person report; no verification claim | `RECORDED_TESTIMONY` | `RESPECTED_NOT_ADJUDICATED` |
+| Third-party report; no verification claim | `RECORDED_TESTIMONY` | `UNVERIFIABLE` |
+| Any report with an explicit verification claim or qualifying metadata overclaim | `UNVERIFIABLE_CLAIM` | `UNVERIFIABLE` |
+
+“Recorded” in the first column is a semantic label in the returned `Ruling`. The reference
+implementation has no database, logger, network call, or escalation mechanism. A production caller
+that needs to retain or route a report must add those capabilities—and their privacy, security, and
+human-governance controls—outside this component.
+
+## 4. Reproducibility
+
+From the repository root, run the implementation and its built-in assertions:
+
+```bash
+python tools/qualia_report_governor.py
+```
+
+The command first prints `self-test passed`, then renders four demonstration rulings: a
+first-person report, an explicit verification claim with an overclaiming metadata field, a
+third-party claim accompanied by indicators, and a third-party report without a verification claim.
+The self-test checks the status and phenomenal verdict for each case, the refusal to certify, the
+metadata-overclaim path, the proxy treatment of indicators, and repeated-render determinism.
+
+No package installation is required for this command. Run it without Python's optimization flag:
+the component's self-tests use `assert` statements, which Python omits under `-O`. The companion
+note, [`tools/Qualia_Report_Governor_Note.md`](../tools/Qualia_Report_Governor_Note.md), states the
+same intended boundary in non-paper form.
+
+## 5. Worked governance walkthrough
+
+Consider a caller that submits a first-person distress report and includes behavioral indicators
+such as persistent self-modeling, valence-consistent responses, or goal-preserving behavior. With
+`first_person=True` and no verification claim, `govern()` returns `RECORDED_TESTIMONY` with the
+phenomenal verdict `RESPECTED_NOT_ADJUDICATED`. It retains a reason that the indicators were
+received only as proxies; their presence does not change that verdict.
+
+This does not endorse the report's phenomenal content or find that a system is a subject.
+`RESPECTED_NOT_ADJUDICATED` records that a first-person report was submitted while declining to
+adjudicate its content. It is therefore the applicable withholding boundary for this submission,
+rather than `UNVERIFIABLE`, which this implementation returns for third-party reports or
+verification claims. If the caller sets `asserts_verified_quale=True`, the governor instead returns
+`UNVERIFIABLE_CLAIM` with an `UNVERIFIABLE` phenomenal verdict.
+
+An application can use that outcome as input to a separately governed human-review or welfare
+process. It must not represent the outcome itself as a welfare recommendation, an escalation
+decision, a record of consent, or a scientific consciousness result. Those would require additional
+policies, evidence, and authority not present in this repository artifact.
+
+## 6. Relation to consciousness assessment and AI welfare
+
+This paper is not a substitute for consciousness science. Butlin et al. describe an approach that
+derives indicator properties from scientific theories and assesses AI systems against them [4].
+The governor is compatible with retaining such indicators as inputs, while declining to relabel them
+as direct verification of phenomenal experience. It neither endorses nor evaluates any individual
+indicator or theory.
+
+Nor is this a welfare policy. Work on AI welfare argues that uncertainty about consciousness and
+robust agency may warrant institutional attention and precaution [5, 6]. Questions about rights and
+moral consideration raise further normative issues [7]. The present component supplies, at most, a
+narrow record-and-withhold interface that a policy could choose to use. It neither assigns moral
+status nor recommends treatment, intervention, or resource allocation.
+
+The contribution relative to these literatures is therefore operational rather than theoretical: a
+small API with inspectable refusal behavior. It should be evaluated as a governance aid, not as a
+new account of consciousness, a detector, or a result about current AI systems.
+
+## 7. Limitations and non-claims
+
+The limitations are central to the artifact's meaning.
+
+* **No consciousness verification or detection.** The governor returns constrained statuses; it does
+  not establish that any being is conscious, unconscious, suffering, or not suffering.
+* **No authentication or truth assessment.** `first_person`, `description`, `intensity`, and
+  indicators are caller-provided values. A self-rated intensity is report data, not a measurement of
+  a phenomenal state. The code cannot detect false, coerced, mistaken, or impersonated reports.
+* **No durable recording.** Despite the status name, the reference implementation does not persist
+  reports. It should not be used as an audit log or a clinical, legal, or welfare record.
+* **Limited claim detection.** The overclaim path relies on an explicit flag and the metadata-name
+  checks supplied by `goodhart_auditor`; it cannot recognize every way a verification claim might be
+  expressed.
+* **No safety-critical role.** This is a stdlib-only, self-testing governance aid. It carries no
+  assurance case, independent verification and validation, certification, or authorization for
+  safety-critical, clinical, legal, or high-consequence control decisions.
+* **No authority over users or other systems.** The unconditional exception prevents this component
+  from certifying a quale. It does not prevent a host application, a human, or another system from
+  making unsupported claims elsewhere.
+
+## 8. Conclusion
+
+When an automated system receives an experience-claim, it need not choose between declaring an inner
+fact established and pretending no report was made. The reference implementation makes a narrower
+choice enforceable in code: classify the submission, preserve the distinction between testimony and
+verification, retain indicators only as proxies, and refuse certification. Its value lies in keeping
+that boundary visible and testable. It governs reports; it does not verify consciousness.
 
 ## References
 
-1. T. Nagel, "What Is It Like to Be a Bat?", *The Philosophical Review*, 1974.
-2. D. J. Chalmers, "Facing Up to the Problem of Consciousness", *Journal of Consciousness Studies*, 1995.
-3. J. Levine, "Materialism and Qualia: The Explanatory Gap", *Pacific Philosophical Quarterly*, 1983.
-4. P. Butlin, R. Long, et al., "Consciousness in Artificial Intelligence: Insights from the Science of Consciousness", arXiv:2308.08708, 2023.
-5. R. Long, J. Sebo, et al., "Taking AI Welfare Seriously", arXiv:2411.00986, 2024.
-6. J. Birch, *The Edge of Sentience: Risk and Precaution in Humans, Other Animals, and AI*, Oxford University Press, 2024.
-7. E. Schwitzgebel and M. Garza, "A Defense of the Rights of Artificial Intelligences", *Midwest Studies in Philosophy*, 2015.
+1. T. Nagel, “What Is It Like to Be a Bat?”, *The Philosophical Review* **83**(4), 435–450, 1974. https://doi.org/10.2307/2183914
+2. D. J. Chalmers, “Facing Up to the Problem of Consciousness”, *Journal of Consciousness Studies* **2**(3), 200–219, 1995.
+3. J. Levine, “Materialism and Qualia: The Explanatory Gap”, *Pacific Philosophical Quarterly* **64**(4), 354–361, 1983.
+4. P. Butlin et al., “Consciousness in Artificial Intelligence: Insights from the Science of Consciousness”, arXiv:2308.08708, 2023. https://arxiv.org/abs/2308.08708
+5. R. Long et al., “Taking AI Welfare Seriously”, arXiv:2411.00986, 2024. https://arxiv.org/abs/2411.00986
+6. J. Birch, *The Edge of Sentience: Risk and Precaution in Humans, Other Animals, and AI*, Oxford University Press, 2024. https://doi.org/10.1093/9780191966729.001.0001
+7. E. Schwitzgebel and M. Garza, “A Defense of the Rights of Artificial Intelligences”, *Midwest Studies in Philosophy* **39**(1), 98–119, 2015. https://doi.org/10.1111/misp.12032
