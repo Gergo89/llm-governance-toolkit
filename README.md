@@ -26,6 +26,7 @@ python tools/devices_infra.py      # physical device actuation gate
 python tools/innovation_infra.py   # innovation / rule-change gate
 python tools/email_signature_infra.py  # email signature governance gate
 python tools/copilot_proxy_infra.py    # Copilot suggestion proxy (59/59)
+python tools/lensflare_infra.py        # lens flare contamination (71/71)
 python tools/capstone_integrity_check.py
 python tools/inference_infra.py
 python tools/exponential_infra.py
@@ -43,6 +44,7 @@ python tools/exponential_infra.py
 | `tools/ground_truth_auditor.py` | Audits whether the truth signal is actually **independent** of the proxy — shadow detection without a reference; error-correlation with one. |
 | `tools/eval_gaming_detector.py` | Defensive detector of **contamination** (inflated → undermines a capability claim) and **sandbagging** (hidden → undermines a safety claim) in model evaluations. |
 | `tools/fiction_function_check.py` | Defensive **fiction-function gate**: fictional framing does not reduce real-world harm potential — the gate blocks when `function_score` exceeds the harm threshold regardless of wrapper. |
+| `tools/lensflare_infra.py` | **Salience-driven signal contamination governor**. A bright, dominant signal creates artefacts that corrupt adjacent signals — the same proxy/truth decoupling applied to epistemic optics. Three canonical flare modes: recency flare (over-weighting recent signals), authority flare (high-authority source eclipses weaker independent evidence), and saturation flare (dominant signal fills the entire observation window). Six fail-closed gates: extreme unfiltered brightness → VOID; saturated contamination radius or high unfiltered salience → DISTORTED; partial spread or moderate bias → ATTENUATED; low-level residual bias → ADVISORY. Anti-flare filter = independent reality check + deliberate signal separation. Verdicts: `CLEAR / ADVISORY / ATTENUATED / DISTORTED / VOID`. Fleet: `CLEAN / MANAGED / COMPROMISED / SATURATED`. |
 
 ### Decision — *what to do, and who authorizes?*
 
