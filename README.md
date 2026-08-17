@@ -25,6 +25,7 @@ python tools/connect_infra.py      # governance suite synthesis
 python tools/devices_infra.py      # physical device actuation gate
 python tools/innovation_infra.py   # innovation / rule-change gate
 python tools/email_signature_infra.py  # email signature governance gate
+python tools/copilot_proxy_infra.py    # Copilot suggestion proxy (59/59)
 python tools/capstone_integrity_check.py
 python tools/inference_infra.py
 python tools/exponential_infra.py
@@ -61,6 +62,7 @@ python tools/exponential_infra.py
 | `tools/devices_infra.py` | **Physical device actuation governor**. Six gates: device registration → blast radius → scope → human-auth + reversibility → channel integrity → firmware. Verdicts: `AUTHORIZED / SUPERVISED / RESTRICTED / BLOCKED / VOID`. |
 | `tools/innovation_infra.py` | **Innovation governance governor**. Controls when novel capabilities or rule-change proposals may proceed — the gate that governs changes to governance itself. Verdicts: `ADOPTED / INCUBATING / SANDBOXED / BLOCKED / VOID`. |
 | `tools/email_signature_infra.py` | **Email signature governance governor**. Six gates: identity verification → injection detection → authorization chain → content integrity → disclosure/scope → minor advisories. Verdicts: `CERTIFIED / PROVISIONAL / RESTRICTED / REJECTED / VOID`. |
+| `tools/copilot_proxy_infra.py` | **GitHub Copilot suggestion governance proxy**. Six gates: task authorization → security scan → license compatibility → novelty/verbatim-copy detection → scope/hallucination/attribution-security → advisory concerns. Verdicts: `ACCEPTED / PROVISIONAL / RESTRICTED / REJECTED / VOID`. Fleet: `ADOPTABLE / MONITORED / QUARANTINED / INERT`. |
 
 ### Consolidation — *order knowledge by status, not fiat*
 
