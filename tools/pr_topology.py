@@ -934,13 +934,8 @@ def _run_tests() -> None:
     tr.ok("merge-partial: sources_converged=1", a.merges[0].sources_converged == 1)
 
     # ── Print results ──────────────────────────────────────────────────────────
-    print("\n" + "=" * 62)
-    total = passed + failed
-    print(f"Results: {passed}/{total} passed", "✓" if failed == 0 else "✗")
-    if failed:
-        print(f"  {failed} test(s) FAILED")
-    print("=" * 62)
-    return failed == 0
+    n_failed = tr.summary()
+    return n_failed == 0
 
 
 # ─── entry point ──────────────────────────────────────────────────────────────
